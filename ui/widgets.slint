@@ -1,0 +1,341 @@
+// Small building blocks shared by the pages. Colours come from the std-widgets
+// Palette, so light and dark both work; spacing follows an 8 px grid.
+
+import { Palette } from "std-widgets.slint";
+
+export struct Opt {
+    value: string,
+    label: string,
+    enabled: bool,
+    selected: bool,
+    // Why a disabled option can't be picked, or a note for an enabled one.
+    tip: string,
+}
+
+export struct Chip {
+    label: string,
+    on: bool,
+}
+
+export struct ChipRow {
+    chips: [Chip],
+}
+
+export struct KV {
+    key: string,
+    value: string,
+    source: string,
+}
+
+export struct Fact {
+    text: string,
+    // "info" or "warn"
+    level: string,
+}
+
+export global Theme {
+    // Set from Rust to the system's monospace family; Slint has no generic "monospace".
+    in-out property <string> mono: "DejaVu Sans Mono";
+    out property <length> radius: 8px;
+    out property <length> small-radius: 6px;
+    out property <length> gap: 8px;
+    out property <length> pad: 16px;
+    out property <length> body: 13px;
+    out property <length> small: 11.5px;
+    out property <color> muted: Palette.foreground.transparentize(0.4);
+    out property <color> faint: Palette.foreground.transparentize(0.75);
+    out property <color> card: Palette.alternate-background;
+    out property <color> line: Palette.border;
+    out property <color> accent: Palette.accent-background;
+    out property <color> on-accent: Palette.accent-foreground;
+    // From the background, because the scheme reads "unknown" while it follows the system.
+    out property <bool> dark: Palette.background.to-hsv().value < 0.5;
+    out property <color> warn: self.dark ? #f0b45a : #a35a00;
+    out property <color> warn-bg: self.dark ? #3a2a10 : #fff3df;
+    out property <color> danger: self.dark ? #ff8a80 : #b3261e;
+    out property <color> good: self.dark ? #7fd18b : #1e7d32;
+}
+
+// A titled panel.
+export component Card inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle;
+    background: Theme.card;
+    border-radius: Theme.radius;
+    border-width: 1px;
+    border-color: Theme.line;
+    VerticalLayout {
+        padding: Theme.pad;
+        spacing: Theme.gap;
+        if root.title != "": Text {
+            text: root.title;
+            font-size: 14px;
+            font-weight: 600;
+            color: Palette.foreground;
+        }
+        if root.subtitle != "": Text {
+            text: root.subtitle;
+            font-size: Theme.small;
+            color: Theme.muted;
+            wrap: word-wrap;
+        }
+        @children
+    }
+}
+
+// A small rounded label.
+export component Tag inherits Rectangle {
+    in property <string> text;
+    in property <bool> strong;
+    height: 20px;
+    width: label.preferred-width + 14px;
+    border-radius: 10px;
+    background: root.strong ? Theme.accent : Palette.foreground.transparentize(0.9);
+    label := Text {
+        text: root.text;
+        font-size: Theme.small;
+        color: root.strong ? Theme.on-accent : Palette.foreground;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+    }
+}
+
+// One line of "key   value  [source]".
+export component KVRow inherits HorizontalLayout {
+    in property <KV> kv;
+    spacing: Theme.gap;
+    Text {
+        text: root.kv.key;
+        width: 96px;
+        font-size: Theme.body;
+        color: Theme.muted;
+    }
+    Text {
+        text: root.kv.value;
+        font-size: Theme.body;
+        color: Palette.foreground;
+        wrap: word-wrap;
+        horizontal-stretch: 1;
+    }
+    if root.kv.source != "": Text {
+        text: "from " + root.kv.source;
+        font-size: Theme.small;
+        color: Theme.faint;
+        horizontal-alignment: right;
+    }
+}
+
+// A notice line: info or warning.
+export component FactLine inherits Rectangle {
+    in property <Fact> fact;
+    border-radius: Theme.small-radius;
+    background: root.fact.level == "warn" ? Theme.warn-bg : Palette.foreground.transparentize(0.94);
+    HorizontalLayout {
+        padding: 8px;
+        padding-left: 12px;
+        spacing: 8px;
+        Text {
+            text: root.fact.level == "warn" ? "!" : "i";
+            font-weight: 700;
+            font-size: Theme.body;
+            color: root.fact.level == "warn" ? Theme.warn : Theme.muted;
+            width: 10px;
+        }
+        Text {
+            text: root.fact.text;
+            font-size: Theme.body;
+            color: Palette.foreground;
+            wrap: word-wrap;
+            horizontal-stretch: 1;
+        }
+    }
+}
+
+// One button of a segmented control. Focusable; Enter or Space picks it.
+component Segment inherits Rectangle {
+    in property <Opt> opt;
+    in property <bool> first;
+    in property <bool> last;
+    callback picked();
+    out property <bool> hovered: touch.has-hover;
+    min-width: label.preferred-width + 20px;
+    height: 30px;
+    border-radius: Theme.small-radius;
+    background: root.opt.selected ? Theme.accent
+        : touch.has-hover && root.opt.enabled ? Palette.foreground.transparentize(0.88)
+        : transparent;
+    border-width: focus.has-focus ? 2px : 0px;
+    border-color: Theme.accent.brighter(0.3);
+    label := Text {
+        text: root.opt.label;
+        font-size: Theme.body;
+        color: root.opt.selected ? Theme.on-accent
+            : root.opt.enabled ? Palette.foreground : Theme.faint;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    focus := FocusScope {
+        enabled: root.opt.enabled;
+        key-pressed(e) => {
+            if (e.text == Key.Return || e.text == " ") {
+                root.picked();
+                return accept;
+            }
+            return reject;
+        }
+        // Stays enabled when the option isn't, so hovering still explains why.
+        touch := TouchArea {
+            mouse-cursor: root.opt.enabled ? pointer : default;
+            clicked => {
+                if (root.opt.enabled) { root.picked(); }
+            }
+        }
+    }
+}
+
+// A row of mutually exclusive options. Disabled options explain themselves on hover.
+export component Segmented inherits VerticalLayout {
+    in property <[Opt]> opts;
+    callback picked(string);
+    property <string> tip;
+    spacing: 4px;
+    HorizontalLayout {
+        alignment: start;
+        Rectangle {
+            border-radius: Theme.small-radius;
+            border-width: 1px;
+            border-color: Theme.line;
+            background: Palette.background;
+            HorizontalLayout {
+                padding: 2px;
+                spacing: 2px;
+                for o[i] in root.opts: Segment {
+                    opt: o;
+                    first: i == 0;
+                    last: i == root.opts.length - 1;
+                    picked => { root.picked(o.value); }
+                    changed hovered => {
+                        if (self.hovered) { root.tip = o.tip; } else if (root.tip == o.tip) { root.tip = ""; }
+                    }
+                }
+            }
+        }
+    }
+    Text {
+        text: root.tip;
+        font-size: Theme.small;
+        color: Theme.muted;
+        wrap: word-wrap;
+        height: 16px;
+    }
+}
+
+// Toggle chips (several may be on), e.g. allowed rates.
+export component ToggleChips inherits VerticalLayout {
+    in property <[Opt]> opts;
+    callback toggled(string);
+    property <string> tip;
+    spacing: 4px;
+    HorizontalLayout {
+        spacing: 6px;
+        alignment: start;
+        for o in root.opts: Rectangle {
+            property <bool> focused: f.has-focus;
+            height: 28px;
+            min-width: t.preferred-width + 20px;
+            border-radius: 14px;
+            border-width: self.focused ? 2px : 1px;
+            border-color: self.focused ? Theme.accent.brighter(0.3) : o.selected ? Theme.accent : Theme.line;
+            background: o.selected ? Theme.accent : ta.has-hover && o.enabled ? Palette.foreground.transparentize(0.9) : transparent;
+            t := Text {
+                text: o.label;
+                font-size: Theme.body;
+                color: o.selected ? Theme.on-accent : o.enabled ? Palette.foreground : Theme.faint;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            f := FocusScope {
+                enabled: o.enabled;
+                key-pressed(e) => {
+                    if (e.text == Key.Return || e.text == " ") {
+                        root.toggled(o.value);
+                        return accept;
+                    }
+                    return reject;
+                }
+                ta := TouchArea {
+                    mouse-cursor: o.enabled ? pointer : default;
+                    clicked => {
+                        if (o.enabled) { root.toggled(o.value); }
+                    }
+                    changed has-hover => {
+                        if (self.has-hover) { root.tip = o.tip; } else if (root.tip == o.tip) { root.tip = ""; }
+                    }
+                }
+            }
+        }
+    }
+    Text {
+        text: root.tip;
+        font-size: Theme.small;
+        color: Theme.muted;
+        wrap: word-wrap;
+        height: 16px;
+    }
+}
+
+// Read-only chips: which standard rates a device supports.
+export component ChipStrip inherits VerticalLayout {
+    in property <[ChipRow]> rows;
+    spacing: 6px;
+    for row in root.rows: HorizontalLayout {
+        spacing: 6px;
+        alignment: start;
+        for c in row.chips: Rectangle {
+            height: 24px;
+            width: max(52px, ct.preferred-width + 16px);
+            border-radius: Theme.small-radius;
+            background: c.on ? Theme.accent.transparentize(0.75) : transparent;
+            border-width: 1px;
+            border-color: c.on ? Theme.accent : Theme.line;
+            ct := Text {
+                text: c.label;
+                font-size: Theme.small;
+                color: c.on ? Palette.foreground : Theme.faint;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+// A label on the left, a control on the right.
+export component Field inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> hint;
+    spacing: Theme.pad;
+    VerticalLayout {
+        width: 150px;
+        alignment: start;
+        spacing: 2px;
+        padding-top: 6px;
+        Text {
+            text: root.label;
+            font-size: Theme.body;
+            font-weight: 600;
+            color: Palette.foreground;
+            wrap: word-wrap;
+        }
+        if root.hint != "": Text {
+            text: root.hint;
+            font-size: Theme.small;
+            color: Theme.muted;
+            wrap: word-wrap;
+        }
+    }
+    VerticalLayout {
+        horizontal-stretch: 1;
+        alignment: start;
+        @children
+    }
+}

@@ -148,6 +148,7 @@ pub enum FileState {
 }
 
 /// Everything a plan needs to know about the system.
+#[derive(Clone, Copy)]
 pub struct PlanContext<'a> {
     pub snapshot: &'a Snapshot,
     pub paths: &'a Paths,
@@ -204,33 +205,106 @@ const QUANTUM_LIMIT: u32 = 8_192;
 // ---- set ---------------------------------------------------------------------------
 
 pub fn plan_set(ctx: &PlanContext, req: &SetRequest) -> Result<Plan, PlanError> {
-    let server = ctx.snapshot.stack.server;
-    let change = &req.change.clone().normalised();
-    let device = req.device;
-    match server {
-        SoundServer::Jack => {
-            return refuse(
-                "A standalone JACK server owns audio. Ratewise shows it read-only; change its \
-                 settings with your JACK tool (such as QjackCtl).",
-            );
-        }
-        SoundServer::None => {
-            return refuse(
-                "No sound server or sound cards were found, so there's nothing to configure. \
-                 `ratewise doctor` shows what's missing.",
-            );
-        }
-        _ => {}
+    let change = req.change.clone().normalised();
+    preflight(ctx, &change, req.device)?;
+    let mode = pick_mode(ctx, &change, req.device, req.mode)?;
+    build(ctx, &[(change, req.device)], mode)
+}
+
+/// Several changes as one plan (one backup, one restart), all applied `mode`. The GUI
+/// collects edits and applies them together.
+pub fn plan_batch(
+    ctx: &PlanContext,
+    edits: &[(Change, Option<&Device>)],
+    mode: Mode,
+) -> Result<Plan, PlanError> {
+    if edits.is_empty() {
+        return refuse("There are no changes to apply.");
     }
-    check_scope(server, change, device)?;
-    let mode = pick_mode(ctx, change, device, req.mode)?;
-    let notes = validate(ctx, change, device)?;
+    let mut items = Vec::with_capacity(edits.len());
+    for (change, device) in edits {
+        let change = change.clone().normalised();
+        preflight(ctx, &change, *device)?;
+        pick_mode(ctx, &change, *device, Some(mode))?;
+        items.push((change, *device));
+    }
+    build(ctx, &items, mode)
+}
+
+/// Whether a change could be applied live, and whether it could be saved, with the
+/// reason when not. Doesn't check the value; see [`check`].
+pub fn availability(
+    ctx: &PlanContext,
+    change: &Change,
+    device: Option<&Device>,
+) -> (Result<(), String>, Result<(), String>) {
+    if let Err(e) = preflight(ctx, change, device) {
+        return (Err(e.0.clone()), Err(e.0));
+    }
+    support(ctx, change, device)
+}
+
+/// Validates a value without planning: `Err` if it would be refused, otherwise the
+/// warnings a plan would carry. The GUI uses it to grey out options.
+pub fn check(
+    ctx: &PlanContext,
+    change: &Change,
+    device: Option<&Device>,
+) -> Result<Vec<String>, PlanError> {
+    let change = change.clone().normalised();
+    preflight(ctx, &change, device)?;
+    validate(ctx, &change, device)
+}
+
+/// Refusals that don't depend on the value or the mode.
+fn preflight(ctx: &PlanContext, change: &Change, device: Option<&Device>) -> Result<(), PlanError> {
+    let server = ctx.snapshot.stack.server;
+    match server {
+        SoundServer::Jack => refuse(
+            "A standalone JACK server owns audio. Ratewise shows it read-only; change its \
+             settings with your JACK tool (such as QjackCtl).",
+        ),
+        SoundServer::None => refuse(
+            "No sound server or sound cards were found, so there's nothing to configure. \
+             `ratewise doctor` shows what's missing.",
+        ),
+        _ => check_scope(server, change, device),
+    }
+}
+
+/// Validates every item against the saved settings as they will be after the items
+/// before it, then plans them.
+fn build(
+    ctx: &PlanContext,
+    items: &[(Change, Option<&Device>)],
+    mode: Mode,
+) -> Result<Plan, PlanError> {
+    let mut notes = Vec::new();
+    let mut saved = ctx.saved.clone();
+    for (change, device) in items {
+        let step = PlanContext {
+            saved: &saved,
+            ..*ctx
+        };
+        for n in validate(&step, change, *device)? {
+            if !notes.contains(&n) {
+                notes.push(n);
+            }
+        }
+        saved = saved.with(change, *device);
+    }
     let mut plan = match mode {
-        Mode::Live => plan_live(ctx, change)?,
-        Mode::Save => plan_save(ctx, change, device)?,
+        Mode::Live => plan_live(ctx, items)?,
+        Mode::Save => plan_save(ctx, items)?,
     };
     plan.notes.splice(0..0, notes);
     Ok(plan)
+}
+
+/// "A", or "A; b; c" for several changes.
+fn titles(items: &[(Change, Option<&Device>)]) -> String {
+    let parts: Vec<String> = items.iter().map(|(c, d)| c.describe(*d)).collect();
+    capitalise(&parts.join("; "))
 }
 
 fn check_scope(
@@ -790,44 +864,45 @@ fn current_clock(ctx: &PlanContext, key: ClockKey) -> Option<ClockValue> {
     }
 }
 
-fn plan_live(ctx: &PlanContext, change: &Change) -> Result<Plan, PlanError> {
+fn plan_live(ctx: &PlanContext, items: &[(Change, Option<&Device>)]) -> Result<Plan, PlanError> {
     if !ctx.has_tool("pw-metadata") {
         return refuse(
             "pw-metadata isn't installed, so live changes aren't possible. Install your \
              distribution's PipeWire tools, or use --save.",
         );
     }
-    let (key, value) =
-        clock_change(change).ok_or_else(|| PlanError("not a live setting".into()))?;
     let mut plan = Plan::new(
         PlanKind::Set(Mode::Live),
-        format!(
-            "{} (live, until PipeWire restarts).",
-            capitalise(&change.describe(None))
-        ),
+        format!("{} (live, until PipeWire restarts).", titles(items)),
     );
-    let previous = current_clock(ctx, key);
-    plan.steps.push(Step::Run {
-        cmd: metadata_cmd(key, value.as_ref()),
-        why: format!("Changes PipeWire's {} setting now.", key.metadata_key()),
-        undo: Some(metadata_cmd(key, previous.as_ref())),
-    });
-    if let Some(v) = value {
-        plan.expect.push(Expect::Clock { key, want: v });
-    }
-    if !matches!(change, Change::ForceRate(_) | Change::ForceQuantum(_)) {
-        plan.afterwards = Some(
-            "Live changes last until PipeWire restarts. To keep it, run the same command with \
-             --save."
-                .into(),
-        );
-    }
-    if matches!(key, ClockKey::Rate | ClockKey::AllowedRates) {
-        plan.notes.push(
-            "PipeWire applies a new default rate the next time the device goes idle and starts \
-             again. To switch immediately, use `force-rate`."
-                .into(),
-        );
+    for (change, _) in items {
+        let (key, value) =
+            clock_change(change).ok_or_else(|| PlanError("not a live setting".into()))?;
+        let previous = current_clock(ctx, key);
+        plan.steps.push(Step::Run {
+            cmd: metadata_cmd(key, value.as_ref()),
+            why: format!("Changes PipeWire's {} setting now.", key.metadata_key()),
+            undo: Some(metadata_cmd(key, previous.as_ref())),
+        });
+        if let Some(v) = value {
+            plan.expect
+                .retain(|e| !matches!(e, Expect::Clock { key: k, .. } if *k == key));
+            plan.expect.push(Expect::Clock { key, want: v });
+        }
+        if !matches!(change, Change::ForceRate(_) | Change::ForceQuantum(_)) {
+            plan.afterwards = Some(
+                "Live changes last until PipeWire restarts. To keep them, save them instead \
+                 (--save)."
+                    .into(),
+            );
+        }
+        let note = "PipeWire applies a new default rate the next time the device goes idle \
+                    and starts again. To switch immediately, use `force-rate`.";
+        if matches!(key, ClockKey::Rate | ClockKey::AllowedRates)
+            && !plan.notes.iter().any(|n| n == note)
+        {
+            plan.notes.push(note.into());
+        }
     }
     Ok(plan)
 }
@@ -1033,16 +1108,14 @@ fn file_step(
     })
 }
 
-fn plan_save(
-    ctx: &PlanContext,
-    change: &Change,
-    device: Option<&Device>,
-) -> Result<Plan, PlanError> {
-    let next = ctx.saved.with(change, device);
+fn plan_save(ctx: &PlanContext, items: &[(Change, Option<&Device>)]) -> Result<Plan, PlanError> {
+    let next = items
+        .iter()
+        .fold(ctx.saved.clone(), |s, (c, d)| s.with(c, *d));
     let desired = desired_files(ctx, &next)?;
     let mut plan = Plan::new(
         PlanKind::Set(Mode::Save),
-        format!("{} (saved).", capitalise(&change.describe(device))),
+        format!("{} (saved).", titles(items)),
     );
     plan.steps = file_steps(ctx, &desired)?;
     if plan.steps.is_empty() {
@@ -1051,7 +1124,10 @@ fn plan_save(
         return Ok(plan);
     }
     finish(ctx, &mut plan);
-    if matches!(change, Change::ResampleQuality(_)) {
+    if items
+        .iter()
+        .any(|(c, _)| matches!(c, Change::ResampleQuality(_)))
+    {
         plan.afterwards = Some(
             "Programs read the resampler quality when they start playing, so restart any that \
              are already playing to hear the change."
@@ -1072,22 +1148,25 @@ fn plan_save(
     }
     // What to check after a restart.
     if ctx.snapshot.stack.server == SoundServer::PipeWire {
-        match (device, clock_change(change)) {
-            (None, Some((key, Some(want)))) => plan.expect.push(Expect::Clock { key, want }),
-            (Some(d), _) => match change {
-                Change::Rate(Value::Set(r)) => plan.expect.push(Expect::DeviceRate {
-                    id: d.id.clone(),
-                    description: d.description.clone(),
-                    rate: *r,
-                }),
-                Change::Format(Value::Set(f)) => plan.expect.push(Expect::DeviceFormat {
-                    id: d.id.clone(),
-                    description: d.description.clone(),
-                    format: f.clone(),
-                }),
-                _ => {}
-            },
-            _ => {}
+        for (change, device) in items {
+            let e = match (device, clock_change(change)) {
+                (None, Some((key, Some(want)))) => Expect::Clock { key, want },
+                (Some(d), _) => match change {
+                    Change::Rate(Value::Set(r)) => Expect::DeviceRate {
+                        id: d.id.clone(),
+                        description: d.description.clone(),
+                        rate: *r,
+                    },
+                    Change::Format(Value::Set(f)) => Expect::DeviceFormat {
+                        id: d.id.clone(),
+                        description: d.description.clone(),
+                        format: f.clone(),
+                    },
+                    _ => continue,
+                },
+                _ => continue,
+            };
+            plan.expect.push(e);
         }
     }
     Ok(plan)
@@ -1334,8 +1413,20 @@ pub fn plan_revert(ctx: &PlanContext, backup: &BackupView) -> Result<Plan, PlanE
 
 /// The plan as `ratewise plan` prints it, with file diffs.
 pub fn render_plan(plan: &Plan, paths: &Paths) -> String {
+    render(plan, paths, false)
+}
+
+/// The plan for the window's review sheet: no title (the sheet shows it) and no
+/// command-line hints.
+pub fn render_plan_window(plan: &Plan, paths: &Paths) -> String {
+    render(plan, paths, true)
+}
+
+fn render(plan: &Plan, paths: &Paths, window: bool) -> String {
     let mut s = String::new();
-    let _ = writeln!(s, "{}", plan.title);
+    if !window {
+        let _ = writeln!(s, "{}", plan.title);
+    }
     if !plan.steps.is_empty() {
         let _ = writeln!(s, "\nSteps");
         for (i, step) in plan.steps.iter().enumerate() {
@@ -1377,24 +1468,41 @@ pub fn render_plan(plan: &Plan, paths: &Paths) -> String {
     }
     if plan.restart.is_some() || plan.afterwards.is_some() {
         let _ = writeln!(s, "\nAfterwards");
-        if let Some(r) = &plan.restart {
-            s.push_str(&restart_text(r));
+        match &plan.restart {
+            Some(r) if window && r.manual.is_none() => {
+                let _ = writeln!(
+                    s,
+                    "  Restart {} for this to take effect. Tick the box below to do it now.",
+                    r.services
+                );
+            }
+            Some(r) => s.push_str(&restart_text(r)),
+            None => {}
         }
         if let Some(a) = &plan.afterwards {
             let _ = writeln!(s, "  {a}");
         }
     }
+    let undo = if window {
+        "\"Revert last change\""
+    } else {
+        "`ratewise revert`"
+    };
     if !plan.steps.is_empty() && plan.kind != PlanKind::Revert {
         if plan.steps.iter().any(|s| s.path().is_some()) {
             let _ = writeln!(
                 s,
-                "\nRatewise backs up every file first; `ratewise revert` undoes this."
+                "\nRatewise backs up every file first; {undo} undoes this."
             );
         } else {
-            let _ = writeln!(s, "\n`ratewise revert` undoes this.");
+            let _ = writeln!(s, "\n{undo} undoes this.");
         }
     }
-    s
+    if window {
+        s.trim_start_matches('\n').to_string()
+    } else {
+        s
+    }
 }
 
 pub fn restart_text(r: &Restart) -> String {

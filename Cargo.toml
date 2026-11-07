@@ -20,6 +20,23 @@ similar = "2"
 thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+png = { version = "0.18", optional = true }
+# No default features: those pull in a system-tray stack we don't use.
+slint = { version = "1.18", default-features = false, optional = true, features = [
+    "std",
+    "compat-1-2",
+    "backend-winit",
+    "renderer-femtovg",
+    "renderer-software",
+    "accessibility",
+] }
+
+[build-dependencies]
+slint-build = { version = "1.18", optional = true }
+
+[features]
+default = ["gui"]
+gui = ["dep:slint", "dep:slint-build", "dep:png"]
 
 [profile.release]
 lto = true

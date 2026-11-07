@@ -1,0 +1,840 @@
+// Ratewise main window (spec §5). Rust fills the view structs from core and
+// handles every callback; this file is layout and presentation only.
+
+import { Button, CheckBox, ListView, Palette, ScrollView, Slider, TabWidget, TextEdit } from "std-widgets.slint";
+import { Card, Chip, ChipRow, ChipStrip, Fact, FactLine, Field, KV, KVRow, Opt, Segmented, Tag, Theme, ToggleChips } from "widgets.slint";
+
+export { Opt, Chip, ChipRow, KV, Fact, Theme }
+
+export struct NavItem {
+    // "header", "device" or "page"
+    kind: string,
+    // "device:<id>", "global" or "doctor"; empty for headers
+    key: string,
+    title: string,
+    badge: string,
+    tag: string,
+    is-default: bool,
+    active: bool,
+}
+
+export struct DeviceView {
+    id: string,
+    name: string,
+    subtitle: string,
+    tags: [string],
+    running-main: string,
+    running-detail: string,
+    running-source: string,
+    active: bool,
+    configured: [KV],
+    supports: [KV],
+    rate-rows: [ChipRow],
+    facts: [Fact],
+    // Why this device can't be configured; empty if it can.
+    edit-why: string,
+    rate-opts: [Opt],
+    rate-why: string,
+    format-opts: [Opt],
+    format-why: string,
+    period-opts: [Opt],
+    period-why: string,
+    headroom-opts: [Opt],
+    headroom-why: string,
+    suspend-opts: [Opt],
+    suspend-why: string,
+    raw: string,
+}
+
+export struct ClockView {
+    server: string,
+    // Shown at the top of the global page.
+    intro: string,
+    rate-opts: [Opt],
+    rate-why: string,
+    allowed-opts: [Opt],
+    allowed-why: string,
+    format-opts: [Opt],
+    format-why: string,
+    // log2 of the quantum the slider shows (5 = 32 frames ... 13 = 8192).
+    quantum-show: bool,
+    quantum-label: string,
+    quantum-why: string,
+    rate-hz: int,
+    min-opts: [Opt],
+    max-opts: [Opt],
+    force-rate-opts: [Opt],
+    force-quantum-opts: [Opt],
+    force-why: string,
+    resample-opts: [Opt],
+    resample-why: string,
+    saved: [KV],
+    can-reset: bool,
+}
+
+export struct ReviewView {
+    open: bool,
+    // "plan", "refused", "working", "done" or "failed"
+    state: string,
+    title: string,
+    body: string,
+    can-restart: bool,
+    restart-label: string,
+    confirm-label: string,
+}
+
+// A scrollable page whose content fills the width.
+component Page inherits ScrollView {
+    content-width: self.visible-width;
+    content-height: inner.preferred-height;
+    inner := VerticalLayout {
+        width: root.visible-width;
+        padding: 24px;
+        spacing: 16px;
+        alignment: start;
+        @children
+    }
+}
+
+component Why inherits Text {
+    font-size: Theme.body;
+    color: Theme.muted;
+    wrap: word-wrap;
+}
+
+// The PipeWire quantum: a power-of-two slider with a live latency readout.
+component QuantumControl inherits VerticalLayout {
+    in-out property <float> index;
+    in property <int> rate-hz;
+    in property <string> label;
+    callback picked(string);
+    property <int> frames: Math.round(Math.pow(2, Math.round(slider.value)));
+    property <string> ms: root.rate-hz > 0 ? (Math.round(root.frames * 10000 / root.rate-hz) / 10) + " ms" : "";
+    spacing: 4px;
+    HorizontalLayout {
+        spacing: 12px;
+        slider := Slider {
+            minimum: 5;
+            maximum: 13;
+            step: 1;
+            value <=> root.index;
+            horizontal-stretch: 1;
+            released(v) => { root.picked("" + Math.round(Math.pow(2, Math.round(v)))); }
+        }
+        Text {
+            text: root.frames + " frames" + (root.ms != "" ? " · " + root.ms : "");
+            font-size: Theme.body;
+            font-weight: 600;
+            color: Palette.foreground;
+            vertical-alignment: center;
+            width: 170px;
+        }
+        Button {
+            text: "Default";
+            clicked => { root.picked("default"); }
+        }
+    }
+    Text {
+        text: "Lower means less latency but more risk of crackles. " + root.label;
+        font-size: Theme.small;
+        color: Theme.muted;
+        wrap: word-wrap;
+    }
+}
+
+// One entry of the sidebar.
+component NavRow inherits Rectangle {
+    in property <NavItem> item;
+    in property <bool> selected;
+    callback clicked();
+    height: root.item.kind == "header" ? 34px : (root.item.badge != "" ? 52px : 38px);
+    if root.item.kind == "header": Text {
+        x: 12px;
+        y: parent.height - self.height - 6px;
+        text: root.item.title;
+        font-size: Theme.small;
+        font-weight: 700;
+        color: Theme.muted;
+    }
+    if root.item.kind != "header": Rectangle {
+        x: 6px;
+        width: parent.width - 12px;
+        y: 2px;
+        height: parent.height - 4px;
+        border-radius: Theme.small-radius;
+        background: root.selected ? Theme.accent.transparentize(0.8)
+            : touch.has-hover ? Palette.foreground.transparentize(0.93) : transparent;
+        border-width: focus.has-focus ? 2px : 0px;
+        border-color: Theme.accent;
+        focus := FocusScope {
+            key-pressed(e) => {
+                if (e.text == Key.Return || e.text == " ") {
+                    root.clicked();
+                    return accept;
+                }
+                return reject;
+            }
+            touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.clicked(); }
+            }
+        }
+        HorizontalLayout {
+            padding-left: 10px;
+            padding-right: 10px;
+            spacing: 8px;
+            VerticalLayout {
+                alignment: center;
+                spacing: 2px;
+                horizontal-stretch: 1;
+                Text {
+                    text: root.item.title;
+                    font-size: Theme.body;
+                    font-weight: root.selected ? 600 : 400;
+                    color: Palette.foreground;
+                    overflow: elide;
+                }
+                if root.item.badge != "": Text {
+                    text: root.item.badge;
+                    font-size: Theme.small;
+                    color: root.item.active ? Theme.good : Theme.muted;
+                    overflow: elide;
+                }
+            }
+            if root.item.tag != "": VerticalLayout {
+                alignment: center;
+                Tag {
+                    text: root.item.tag;
+                    strong: root.item.is-default;
+                }
+            }
+        }
+    }
+}
+
+component DevicePage inherits TabWidget {
+    in property <DeviceView> device;
+    in property <ClockView> clock;
+    in-out property <float> quantum-index;
+    callback device-option(string, string);
+    callback clock-option(string, string);
+
+    Tab {
+        title: "Overview";
+        Page {
+            HorizontalLayout {
+                spacing: 12px;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 4px;
+                    Text {
+                        text: root.device.name;
+                        font-size: 22px;
+                        font-weight: 600;
+                        color: Palette.foreground;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: root.device.subtitle;
+                        font-size: Theme.body;
+                        color: Theme.muted;
+                        wrap: word-wrap;
+                    }
+                }
+                for t in root.device.tags: VerticalLayout {
+                    alignment: start;
+                    Tag { text: t; }
+                }
+            }
+            for f in root.device.facts: FactLine { fact: f; }
+            HorizontalLayout {
+                spacing: 16px;
+                Card {
+                    title: "Running now";
+                    horizontal-stretch: 1;
+                    Text {
+                        text: root.device.running-main;
+                        font-size: 28px;
+                        font-weight: 600;
+                        color: root.device.active ? Palette.foreground : Theme.muted;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: root.device.running-detail;
+                        font-size: Theme.body;
+                        color: Palette.foreground;
+                        wrap: word-wrap;
+                    }
+                    if root.device.running-source != "": Text {
+                        text: "from " + root.device.running-source;
+                        font-size: Theme.small;
+                        color: Theme.faint;
+                    }
+                }
+                Card {
+                    title: "Configured";
+                    horizontal-stretch: 1;
+                    for kv in root.device.configured: KVRow { kv: kv; }
+                }
+            }
+            Card {
+                title: "What it supports";
+                ChipStrip { rows: root.device.rate-rows; }
+                for kv in root.device.supports: KVRow { kv: kv; }
+            }
+        }
+    }
+    Tab {
+        title: "Sample rate & format";
+        Page {
+            if root.device.edit-why != "": FactLine {
+                fact: { text: root.device.edit-why, level: "info" };
+            }
+            Card {
+                title: "Sample rate";
+                subtitle: "The rate this device runs at. Only rates it supports are offered.";
+                if root.device.rate-opts.length > 0: Segmented {
+                    opts: root.device.rate-opts;
+                    picked(v) => { root.device-option("rate", v); }
+                }
+                if root.device.rate-why != "": Why { text: root.device.rate-why; }
+            }
+            Card {
+                title: "Sample format";
+                subtitle: "Bit depth sent to the hardware.";
+                if root.device.format-opts.length > 0: Segmented {
+                    opts: root.device.format-opts;
+                    picked(v) => { root.device-option("format", v); }
+                }
+                if root.device.format-why != "": Why { text: root.device.format-why; }
+            }
+        }
+    }
+    Tab {
+        title: "Buffer & latency";
+        Page {
+            Card {
+                title: "Buffer size (quantum)";
+                subtitle: root.clock.server == "PipeWire" ? "PipeWire processes audio in blocks of this many frames. It applies to every device." : "";
+                if root.clock.quantum-show: QuantumControl {
+                    index <=> root.quantum-index;
+                    rate-hz: root.clock.rate-hz;
+                    label: root.clock.quantum-label;
+                    picked(v) => { root.clock-option("quantum", v); }
+                }
+                if root.clock.quantum-why != "": Why { text: root.clock.quantum-why; }
+            }
+            Card {
+                title: "Period size";
+                subtitle: "How much the driver transfers at a time. Raising it is a common fix for crackles on USB DACs.";
+                if root.device.period-opts.length > 0: Segmented {
+                    opts: root.device.period-opts;
+                    picked(v) => { root.device-option("period", v); }
+                }
+                if root.device.period-why != "": Why { text: root.device.period-why; }
+            }
+            Card {
+                title: "Headroom";
+                subtitle: "Extra frames of safety margin in the device buffer.";
+                if root.device.headroom-opts.length > 0: Segmented {
+                    opts: root.device.headroom-opts;
+                    picked(v) => { root.device-option("headroom", v); }
+                }
+                if root.device.headroom-why != "": Why { text: root.device.headroom-why; }
+            }
+        }
+    }
+    Tab {
+        title: "Advanced";
+        Page {
+            Card {
+                title: "Suspend when idle";
+                subtitle: "Closing an idle device saves power but can cause a pop or a delay when playback starts.";
+                if root.device.suspend-opts.length > 0: Segmented {
+                    opts: root.device.suspend-opts;
+                    picked(v) => { root.device-option("suspend", v); }
+                }
+                if root.device.suspend-why != "": Why { text: root.device.suspend-why; }
+            }
+            Card {
+                title: "Resampler quality";
+                subtitle: "Used when a program's rate differs from the device's. Higher sounds cleaner and costs more CPU. Applies to every device.";
+                if root.clock.resample-opts.length > 0: Segmented {
+                    opts: root.clock.resample-opts;
+                    picked(v) => { root.clock-option("resample", v); }
+                }
+                if root.clock.resample-why != "": Why { text: root.clock.resample-why; }
+            }
+            Card {
+                title: "Everything Ratewise knows";
+                subtitle: "The same as `ratewise show --json`. Select and copy it for a bug report.";
+                TextEdit {
+                    text: root.device.raw;
+                    read-only: true;
+                    font-size: 12px;
+                    font-family: Theme.mono;
+                    height: 280px;
+                    wrap: no-wrap;
+                }
+            }
+        }
+    }
+}
+
+component GlobalPage inherits Page {
+    in property <ClockView> clock;
+    in-out property <float> quantum-index;
+    callback clock-option(string, string);
+    callback reset();
+
+    Text {
+        text: "Global settings";
+        font-size: 22px;
+        font-weight: 600;
+        color: Palette.foreground;
+    }
+    if root.clock.intro != "": Why { text: root.clock.intro; }
+    if root.clock.server != "This system": VerticalLayout {
+        spacing: 16px;
+        Card {
+            title: "Default sample rate";
+            subtitle: "What the sound server runs at when nothing asks for another rate.";
+            if root.clock.rate-opts.length > 0: Segmented {
+                opts: root.clock.rate-opts;
+                picked(v) => { root.clock-option("rate", v); }
+            }
+            if root.clock.rate-why != "": Why { text: root.clock.rate-why; }
+        }
+        Card {
+            title: "Allowed sample rates";
+            subtitle: "Rates the server may switch to so music plays at its own rate, without resampling.";
+            if root.clock.allowed-opts.length > 0: ToggleChips {
+                opts: root.clock.allowed-opts;
+                toggled(v) => { root.clock-option("allowed", v); }
+            }
+            if root.clock.allowed-why != "": Why { text: root.clock.allowed-why; }
+        }
+        if root.clock.format-opts.length > 0 || root.clock.format-why != "": Card {
+            title: "Sample format";
+            if root.clock.format-opts.length > 0: Segmented {
+                opts: root.clock.format-opts;
+                picked(v) => { root.clock-option("format", v); }
+            }
+            if root.clock.format-why != "": Why { text: root.clock.format-why; }
+        }
+        Card {
+            title: "Buffer size (quantum)";
+            if root.clock.quantum-show: QuantumControl {
+                index <=> root.quantum-index;
+                rate-hz: root.clock.rate-hz;
+                label: root.clock.quantum-label;
+                picked(v) => { root.clock-option("quantum", v); }
+            }
+            if root.clock.quantum-show: Field {
+                label: "Smallest";
+                hint: "Programs can't ask for less.";
+                Segmented {
+                    opts: root.clock.min-opts;
+                    picked(v) => { root.clock-option("min-quantum", v); }
+                }
+            }
+            if root.clock.quantum-show: Field {
+                label: "Largest";
+                hint: "Programs can't ask for more.";
+                Segmented {
+                    opts: root.clock.max-opts;
+                    picked(v) => { root.clock-option("max-quantum", v); }
+                }
+            }
+            if root.clock.quantum-why != "": Why { text: root.clock.quantum-why; }
+        }
+        Card {
+            title: "Resampler quality";
+            if root.clock.resample-opts.length > 0: Segmented {
+                opts: root.clock.resample-opts;
+                picked(v) => { root.clock-option("resample", v); }
+            }
+            if root.clock.resample-why != "": Why { text: root.clock.resample-why; }
+        }
+        Card {
+            title: "Testing (live only)";
+            subtitle: "Force the whole graph to one rate or buffer size right now, to try something. Forced values aren't saved and end when PipeWire restarts.";
+            if root.clock.force-rate-opts.length > 0: Field {
+                label: "Force rate";
+                Segmented {
+                    opts: root.clock.force-rate-opts;
+                    picked(v) => { root.clock-option("force-rate", v); }
+                }
+            }
+            if root.clock.force-quantum-opts.length > 0: Field {
+                label: "Force quantum";
+                Segmented {
+                    opts: root.clock.force-quantum-opts;
+                    picked(v) => { root.clock-option("force-quantum", v); }
+                }
+            }
+            if root.clock.force-why != "": Why { text: root.clock.force-why; }
+        }
+        Card {
+            title: "Saved by Ratewise";
+            if root.clock.saved.length == 0: Why { text: "Nothing yet. Settings you save permanently are listed here."; }
+            for kv in root.clock.saved: KVRow { kv: kv; }
+            HorizontalLayout {
+                alignment: start;
+                Button {
+                    text: "Remove all Ratewise settings…";
+                    enabled: root.clock.can-reset;
+                    clicked => { root.reset(); }
+                }
+            }
+        }
+    }
+}
+
+component DoctorPage inherits VerticalLayout {
+    in property <string> text;
+    padding: 24px;
+    spacing: 12px;
+    Text {
+        text: "About this system";
+        font-size: 22px;
+        font-weight: 600;
+        color: Palette.foreground;
+    }
+    Why { text: "The same report as `ratewise doctor`. Select and copy it for a bug report."; }
+    TextEdit {
+        text: root.text;
+        read-only: true;
+        font-size: 12px;
+        font-family: Theme.mono;
+        wrap: no-wrap;
+        vertical-stretch: 1;
+    }
+}
+
+component ReviewSheet inherits Rectangle {
+    in property <ReviewView> review;
+    in-out property <bool> restart-now;
+    callback confirm();
+    callback close();
+    background: #00000080;
+    // Swallow clicks so the page behind can't be used.
+    TouchArea { }
+    panel := Rectangle {
+        width: min(860px, root.width - 64px);
+        height: min(680px, root.height - 64px);
+        background: Palette.background;
+        border-radius: 12px;
+        border-width: 1px;
+        border-color: Theme.line;
+        drop-shadow-blur: 24px;
+        drop-shadow-color: #00000060;
+        VerticalLayout {
+            padding: 20px;
+            spacing: 12px;
+            Text {
+                text: root.review.title;
+                font-size: 18px;
+                font-weight: 600;
+                color: root.review.state == "refused" || root.review.state == "failed" ? Theme.danger : Palette.foreground;
+                wrap: word-wrap;
+            }
+            Rectangle {
+                vertical-stretch: 1;
+                border-radius: Theme.small-radius;
+                border-width: 1px;
+                border-color: Theme.line;
+                background: Theme.card;
+                sv := ScrollView {
+                    content-width: max(self.visible-width, body.preferred-width + 24px);
+                    content-height: body.preferred-height + 24px;
+                    body := Text {
+                        x: 12px;
+                        y: 12px;
+                        width: max(self.preferred-width, sv.visible-width - 24px);
+                        text: root.review.body;
+                        font-family: Theme.mono;
+                        font-size: 12px;
+                        color: Palette.foreground;
+                        wrap: root.review.state == "refused" ? word-wrap : no-wrap;
+                    }
+                }
+            }
+            if root.review.state == "plan" && root.review.can-restart: CheckBox {
+                text: root.review.restart-label;
+                checked <=> root.restart-now;
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: end;
+                if root.review.state == "working": Text {
+                    text: "Working…";
+                    vertical-alignment: center;
+                    color: Theme.muted;
+                }
+                Button {
+                    text: root.review.state == "plan" ? "Cancel" : "Close";
+                    enabled: root.review.state != "working";
+                    clicked => { root.close(); }
+                }
+                if root.review.state == "plan": Button {
+                    text: root.review.confirm-label;
+                    primary: true;
+                    clicked => { root.confirm(); }
+                }
+            }
+        }
+    }
+}
+
+export component AppWindow inherits Window {
+    title: "Ratewise";
+    preferred-width: 1180px;
+    preferred-height: 780px;
+    min-width: 960px;
+    min-height: 620px;
+    background: Palette.background;
+    default-font-size: 13px;
+
+    in property <[NavItem]> nav;
+    in-out property <string> selected;
+    // "device", "global", "doctor" or "empty"
+    in property <string> page: "empty";
+    in property <string> empty-text: "Looking for sound devices…";
+    in property <DeviceView> device;
+    in property <ClockView> clock;
+    in-out property <float> quantum-index: 10;
+    in-out property <int> device-tab;
+    in property <string> status;
+    in property <[Fact]> banner;
+    in property <int> pending-count;
+    in property <string> pending-summary;
+    in property <bool> can-live;
+    in property <bool> can-save;
+    in property <string> apply-why;
+    in property <bool> can-revert;
+    in property <string> revert-label;
+    in property <ReviewView> review;
+    in-out property <bool> restart-now;
+    in property <string> doctor-text;
+    in property <bool> busy;
+    // "system", "light" or "dark"
+    in-out property <string> theme-mode: "system";
+
+    callback select(string);
+    callback refresh();
+    callback device-option(string, string);
+    callback clock-option(string, string);
+    callback discard();
+    callback apply(string);
+    callback revert();
+    callback reset();
+    callback review-confirm();
+    callback review-close();
+
+    function cycle-theme() {
+        if (root.theme-mode == "system") {
+            root.theme-mode = "light";
+            Palette.color-scheme = ColorScheme.light;
+        } else if (root.theme-mode == "light") {
+            root.theme-mode = "dark";
+            Palette.color-scheme = ColorScheme.dark;
+        } else {
+            root.theme-mode = "system";
+            Palette.color-scheme = ColorScheme.unknown;
+        }
+    }
+    public function set-theme(mode: string) {
+        root.theme-mode = mode;
+        Palette.color-scheme = mode == "dark" ? ColorScheme.dark : mode == "light" ? ColorScheme.light : ColorScheme.unknown;
+    }
+
+    HorizontalLayout {
+        // Sidebar
+        Rectangle {
+            width: 290px;
+            background: Theme.card;
+            VerticalLayout {
+                padding-top: 16px;
+                padding-bottom: 12px;
+                spacing: 8px;
+                HorizontalLayout {
+                    padding-left: 18px;
+                    padding-right: 12px;
+                    spacing: 8px;
+                    Text {
+                        text: "Ratewise";
+                        font-size: 18px;
+                        font-weight: 700;
+                        color: Palette.foreground;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                    Button {
+                        text: root.busy ? "Refreshing…" : "Refresh";
+                        enabled: !root.busy;
+                        clicked => { root.refresh(); }
+                    }
+                    Button {
+                        text: root.theme-mode == "system" ? "Auto" : root.theme-mode == "light" ? "Light" : "Dark";
+                        accessible-label: "Theme: " + self.text;
+                        clicked => { root.cycle-theme(); }
+                    }
+                }
+                ListView {
+                    vertical-stretch: 1;
+                    for item in root.nav: NavRow {
+                        item: item;
+                        selected: item.key != "" && item.key == root.selected;
+                        clicked => { root.select(item.key); }
+                    }
+                }
+                Rectangle {
+                    height: 1px;
+                    background: Theme.line;
+                }
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    spacing: 8px;
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        border-radius: 14px;
+                        background: Palette.foreground.transparentize(0.92);
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            padding-top: 6px;
+                            padding-bottom: 6px;
+                            Text {
+                                text: root.status;
+                                font-size: Theme.small;
+                                color: Palette.foreground;
+                                vertical-alignment: center;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Rectangle {
+            width: 1px;
+            background: Theme.line;
+        }
+        // Main
+        VerticalLayout {
+            horizontal-stretch: 1;
+            if root.banner.length > 0: VerticalLayout {
+                padding: 12px;
+                padding-bottom: 0px;
+                spacing: 6px;
+                for f in root.banner: FactLine { fact: f; }
+            }
+            if root.page == "device": DevicePage {
+                vertical-stretch: 1;
+                current-index <=> root.device-tab;
+                device: root.device;
+                clock: root.clock;
+                quantum-index <=> root.quantum-index;
+                device-option(k, v) => { root.device-option(k, v); }
+                clock-option(k, v) => { root.clock-option(k, v); }
+            }
+            if root.page == "global": GlobalPage {
+                vertical-stretch: 1;
+                clock: root.clock;
+                quantum-index <=> root.quantum-index;
+                clock-option(k, v) => { root.clock-option(k, v); }
+                reset => { root.reset(); }
+            }
+            if root.page == "doctor": DoctorPage {
+                vertical-stretch: 1;
+                text: root.doctor-text;
+            }
+            if root.page == "empty": Rectangle {
+                vertical-stretch: 1;
+                Text {
+                    width: min(520px, parent.width - 48px);
+                    text: root.empty-text;
+                    font-size: 15px;
+                    color: Theme.muted;
+                    wrap: word-wrap;
+                    horizontal-alignment: center;
+                }
+            }
+            // Action bar
+            Rectangle {
+                height: 60px;
+                background: Theme.card;
+                Rectangle {
+                    y: 0;
+                    height: 1px;
+                    background: Theme.line;
+                }
+                HorizontalLayout {
+                    padding-left: 20px;
+                    padding-right: 16px;
+                    spacing: 8px;
+                    VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 1;
+                        spacing: 2px;
+                        Text {
+                            text: root.pending-count == 0 ? "No unsaved changes" : root.pending-count == 1 ? "1 change waiting" : root.pending-count + " changes waiting";
+                            font-size: Theme.body;
+                            font-weight: 600;
+                            color: Palette.foreground;
+                        }
+                        Text {
+                            text: root.pending-count > 0 ? (root.apply-why != "" ? root.apply-why : root.pending-summary) : root.revert-label;
+                            font-size: Theme.small;
+                            color: Theme.muted;
+                            overflow: elide;
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: "Revert last change";
+                            enabled: root.can-revert && root.pending-count == 0;
+                            clicked => { root.revert(); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: "Discard";
+                            enabled: root.pending-count > 0;
+                            clicked => { root.discard(); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: "Apply live";
+                            enabled: root.can-live;
+                            clicked => { root.apply("live"); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: "Save permanently…";
+                            primary: true;
+                            enabled: root.can-save;
+                            clicked => { root.apply("save"); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if root.review.open: ReviewSheet {
+        width: root.width;
+        height: root.height;
+        review: root.review;
+        restart-now <=> root.restart-now;
+        confirm => { root.review-confirm(); }
+        close => { root.review-close(); }
+    }
+}

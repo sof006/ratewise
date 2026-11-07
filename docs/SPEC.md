@@ -147,6 +147,13 @@ The toolkit is **Slint**, using its own renderer.
 - Keep it consistent: 8 px spacing grid, one accent colour, no clutter. Empty and error states need real wording, e.g. "No sound devices found. This usually means you don't have access to /dev/snd. Are you in the `audio` group, or running inside a container?"
 - It must be fully keyboard-navigable, and must stay usable at 1280×720 and on HiDPI.
 
+### Behaviour
+- Picks are collected as pending edits; `Apply live` or `Save permanently` turns them all into one plan (one backup, one restart). Picking what's already in effect drops the edit.
+- Options a device or stack can't take are shown disabled, and hovering one says why.
+- The review sheet offers to restart the affected services, ticked by default and labelled as interrupting sound.
+- Probing and applying run on a worker thread. "Running now" refreshes every 3 s without opening devices; Refresh re-probes everything.
+- Slint has no API that reports which renderer it ended up using, so the Doctor page states the policy (OpenGL with automatic software fallback, or software when forced).
+
 ---
 
 ## 6. Packaging: the "always opens" contract
@@ -196,11 +203,15 @@ ratewise plan …                     print the plan + diffs, change nothing
 ratewise revert | reset [--restart] [--dry-run]
 ratewise doctor                     stack/version/tools/renderer report
 ratewise capture-fixture <dir>      dump pw-dump, /proc/asound, versions for bug reports + tests
+ratewise                            open the window
+ratewise --self-test                render one frame offscreen to PNG (in the temp dir), exit 0 if it isn't blank
 ```
 
 Device selectors accept the stable name, the ALSA `hw:CARD=…` id, or a fuzzy description match. `--json` output is a stable, documented schema.
 
-Without `--live` or `--save`, `set` changes things live when it can and otherwise explains that `--save` is needed. Values accept friendly spellings (`96k`, `44.1kHz`, `default`; `off` for force values and suspend). `--restart` restarts the affected services after a save, and asks for nothing first, so the GUI must confirm. Hidden flags for development: `--fixture <dir>` reads a captured system, and `--sandbox <dir>` sends every write into `<dir>/home` and only records commands; `--fixture` refuses to write without `--sandbox`.
+Without `--live` or `--save`, `set` changes things live when it can and otherwise explains that `--save` is needed. Values accept friendly spellings (`96k`, `44.1kHz`, `default`; `off` for force values and suspend). `--restart` restarts the affected services after a save, and asks for nothing first, so the GUI must confirm. Hidden flags for development: `--fixture <dir>` reads a captured system, and `--sandbox <dir>` sends every write into `<dir>/home` and only records commands; `--fixture` refuses to write without `--sandbox`. The window takes the same two flags; with `--fixture` alone it shows the captured system read-only.
+
+Environment variables: `RATEWISE_LOG=debug` for verbose logs, `RATEWISE_RENDERER=software` to skip OpenGL, `RATEWISE_THEME=light|dark` to override the system theme. For design review, the hidden `--screenshot <png>` renders the window to a file and exits; `RATEWISE_PAGE` picks the page (`device:<id>`, `global`, `doctor`, `review:<setting>=<value>`, or `apply:<setting>=<value>`, which also confirms it, so use `--sandbox`), and `RATEWISE_TAB=0..3` picks the device tab.
 
 ---
 

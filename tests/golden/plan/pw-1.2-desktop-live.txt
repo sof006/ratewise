@@ -8,6 +8,6 @@ Notes
   - 256 frames at 48 kHz is 5.3 ms. Lower means less latency but more risk of crackles.
 
 Afterwards
-  Live changes last until PipeWire restarts. To keep it, run the same command with --save.
+  Live changes last until PipeWire restarts. To keep them, save them instead (--save).
 
 `ratewise revert` undoes this.

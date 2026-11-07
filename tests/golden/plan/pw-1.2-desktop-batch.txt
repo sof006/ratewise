@@ -1,0 +1,43 @@
+Set the default quantum (buffer size) to 256 frames; keep D50s Analog Stereo open when idle (no suspend); set the allowed sample rates to 44.1, 96 kHz (saved).
+
+Steps
+  1. Create ~/.config/pipewire/pipewire.conf.d/60-ratewise.conf
+     PipeWire's clock settings.
+       @@ -0,0 +1,6 @@
+       +# Written by Ratewise. It regenerates this file on every `ratewise set --save`,
+       +# so edits here are lost. `ratewise reset` removes it.
+       +context.properties = {
+       +    default.clock.allowed-rates = [ 44100 96000 ]
+       +    default.clock.quantum = 256
+       +}
+  2. Create ~/.config/wireplumber/wireplumber.conf.d/60-ratewise.conf
+     WirePlumber rules for per-device settings.
+       @@ -0,0 +1,15 @@
+       +# Written by Ratewise. It regenerates this file on every `ratewise set --save`,
+       +# so edits here are lost. `ratewise reset` removes it.
+       +monitor.alsa.rules = [
+       +  {
+       +    # D50s Analog Stereo
+       +    matches = [
+       +      { node.name = "alsa_output.usb-Topping_D50s-00.analog-stereo" }
+       +    ]
+       +    actions = {
+       +      update-props = {
+       +        session.suspend-timeout-seconds = 0
+       +      }
+       +    }
+       +  }
+       +]
+  3. Create ~/.local/state/ratewise/saved.json
+     Ratewise's record of what it has saved.
+
+Notes
+  - 256 frames at 48 kHz is 5.3 ms. Lower means less latency but more risk of crackles.
+  - The default rate (48 kHz) isn't in the list. PipeWire still starts at it and switches when a stream asks for a listed rate.
+  - PipeWire switches rate only while the device is idle, and only to rates that device supports.
+
+Afterwards
+  Restart PipeWire, pipewire-pulse and WirePlumber for this to take effect. Sound stops for a moment. Add --restart to do it now, or run:
+    systemctl --user restart pipewire.service pipewire-pulse.service wireplumber.service
+
+Ratewise backs up every file first; `ratewise revert` undoes this.

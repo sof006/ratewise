@@ -1,0 +1,1236 @@
+//! Builds what the window shows from the probed state, the saved record and the
+//! pending edits. No I/O: everything comes from [`Inputs`].
+
+use slint::{ModelRc, SharedString, VecModel};
+
+use super::edits::Edits;
+use super::{Chip, ChipRow, ClockView, DeviceView, Fact, KV, NavItem, Opt};
+use crate::app::Inputs;
+use crate::core::model::{
+    Device, DeviceKind, Direction, KernelProbeStatus, Running, STANDARD_RATES, SampleFormat,
+    SoundServer, khz,
+};
+use crate::core::plan::{self, PlanContext};
+use crate::core::settings::{Change, DeviceSaved, Value, rate_list};
+
+/// Rates offered in selectors. Higher ones appear only for devices that can use them.
+const COMMON_RATES: [u32; 10] = [
+    44_100, 48_000, 88_200, 96_000, 176_400, 192_000, 352_800, 384_000, 705_600, 768_000,
+];
+const FORMATS: [(SampleFormat, &str); 5] = [
+    (SampleFormat::S16Le, "16-bit"),
+    (SampleFormat::S24_3Le, "24-bit packed"),
+    (SampleFormat::S24Le, "24-bit"),
+    (SampleFormat::S32Le, "32-bit"),
+    (SampleFormat::FloatLe, "32-bit float"),
+];
+
+/// What a view needs: the state, the edits, and whether changes can be applied.
+pub struct Ctx<'a> {
+    pub inputs: &'a Inputs,
+    pub edits: &'a Edits,
+    /// Why nothing can be applied (a captured system without a sandbox, no `$HOME`).
+    pub read_only: Option<&'a str>,
+}
+
+impl Ctx<'_> {
+    fn plan(&self) -> PlanContext<'_> {
+        self.inputs.ctx()
+    }
+    fn server(&self) -> SoundServer {
+        self.inputs.snapshot.stack.server
+    }
+    fn clock(&self) -> Option<&crate::core::model::ClockSettings> {
+        self.inputs.snapshot.clock.as_ref().map(|c| &c.value)
+    }
+    fn saved_device(&self, id: &str) -> Option<&DeviceSaved> {
+        self.inputs.saved.devices.get(id)
+    }
+}
+
+pub fn model<T: Clone + 'static>(v: Vec<T>) -> ModelRc<T> {
+    ModelRc::new(VecModel::from(v))
+}
+
+fn s(text: impl AsRef<str>) -> SharedString {
+    text.as_ref().into()
+}
+
+fn opt(
+    value: impl AsRef<str>,
+    label: impl AsRef<str>,
+    selected: bool,
+    check: Result<Vec<String>, String>,
+) -> Opt {
+    let (enabled, tip) = match check {
+        Ok(warnings) => (true, warnings.into_iter().next().unwrap_or_default()),
+        Err(why) => (false, why),
+    };
+    Opt {
+        value: s(value),
+        label: s(label),
+        enabled,
+        selected,
+        tip: s(tip),
+    }
+}
+
+fn checked(
+    ctx: &PlanContext,
+    change: Change,
+    device: Option<&Device>,
+) -> Result<Vec<String>, String> {
+    plan::check(ctx, &change, device).map_err(|e| e.0)
+}
+
+fn value_str<T: ToString>(v: Option<&Value<T>>) -> Option<String> {
+    v.map(|v| match v {
+        Value::Set(x) => x.to_string(),
+        Value::Default => "default".into(),
+    })
+}
+
+// ---- sidebar -----------------------------------------------------------------------
+
+pub fn running_short(d: &Device) -> String {
+    match d.running.as_ref().map(|r| &r.value) {
+        Some(Running::Active(p)) => match &p.format {
+            Some(f) => format!("{} kHz · {}", khz(p.rate), f.depth_label()),
+            None => format!("{} kHz", khz(p.rate)),
+        },
+        Some(Running::Idle) => "idle".into(),
+        None => String::new(),
+    }
+}
+
+fn is_active(d: &Device) -> bool {
+    matches!(
+        d.running.as_ref().map(|r| &r.value),
+        Some(Running::Active(_))
+    )
+}
+
+fn is_default(d: &Device) -> bool {
+    d.pipewire.as_ref().is_some_and(|p| p.is_default)
+}
+
+pub fn nav(inputs: &Inputs) -> Vec<NavItem> {
+    let mut out = Vec::new();
+    let header = |title: &str| NavItem {
+        kind: s("header"),
+        title: s(title),
+        ..Default::default()
+    };
+    let device = |d: &Device| {
+        let running = running_short(d);
+        NavItem {
+            kind: s("device"),
+            key: s(format!("device:{}", d.id)),
+            title: s(&d.description),
+            badge: s(match running.as_str() {
+                "" => d.kind.label().to_string(),
+                r => format!("{} · {r}", d.kind.label()),
+            }),
+            tag: s(if is_default(d) { "Default" } else { "" }),
+            is_default: is_default(d),
+            active: is_active(d),
+        }
+    };
+    let devices = &inputs.snapshot.devices;
+    let outputs: Vec<&Device> = devices
+        .iter()
+        .filter(|d| d.direction != Direction::Capture)
+        .collect();
+    let inputs_: Vec<&Device> = devices
+        .iter()
+        .filter(|d| d.direction == Direction::Capture)
+        .collect();
+    if !outputs.is_empty() {
+        out.push(header("OUTPUTS"));
+        out.extend(outputs.into_iter().map(device));
+    }
+    if !inputs_.is_empty() {
+        out.push(header("INPUTS"));
+        out.extend(inputs_.into_iter().map(device));
+    }
+    out.push(header("SYSTEM"));
+    for (key, title) in [
+        ("global", "Global settings"),
+        ("doctor", "About this system"),
+    ] {
+        out.push(NavItem {
+            kind: s("page"),
+            key: s(key),
+            title: s(title),
+            ..Default::default()
+        });
+    }
+    out
+}
+
+// ---- device page -------------------------------------------------------------------
+
+pub fn device_view(c: &Ctx, d: &Device) -> DeviceView {
+    let pc = c.plan();
+    let saved = c.saved_device(&d.id);
+    let pending = |name: &str| c.edits.find(name, Some(&d.id));
+
+    // Running now.
+    let (running_main, running_detail, running_source) = match &d.running {
+        Some(r) => match &r.value {
+            Running::Active(p) => {
+                let mut detail = Vec::new();
+                if let Some(f) = &p.format {
+                    detail.push(f.alsa_name().to_string());
+                }
+                if let Some(ch) = p.channels {
+                    detail.push(format!("{ch} channels"));
+                }
+                if let (Some(n), Some(ms)) = (p.period_frames, p.period_ms()) {
+                    detail.push(format!("period {n} frames ({ms:.1} ms)"));
+                }
+                if let (Some(n), Some(ms)) = (p.buffer_frames, p.buffer_ms()) {
+                    detail.push(format!("buffer {n} frames ({ms:.1} ms)"));
+                }
+                (running_short(d), detail.join(" · "), r.source.label().to_string())
+            }
+            Running::Idle => (
+                "Idle".to_string(),
+                "Nothing is playing through it right now. The hardware starts when a program uses it.".to_string(),
+                r.source.label().to_string(),
+            ),
+        },
+        None => ("Unknown".into(), "Ratewise couldn't read its state.".into(), String::new()),
+    };
+
+    // Configured.
+    let mut configured = Vec::new();
+    let pipewire = c.server() == SoundServer::PipeWire;
+    let row = |key: &str, value: String| KV {
+        key: s(key),
+        value: s(value),
+        source: SharedString::new(),
+    };
+    let describe =
+        |pending: Option<&Change>, saved: Option<String>, otherwise: String| match (pending, saved)
+        {
+            (Some(ch), _) => format!("{} (not applied yet)", pending_value(ch)),
+            (None, Some(v)) => format!("{v} (saved by Ratewise)"),
+            (None, None) => otherwise,
+        };
+    let clock_rate = c.clock().and_then(|k| k.rate);
+    configured.push(row(
+        "Rate",
+        describe(
+            pending("rate"),
+            saved
+                .and_then(|s| s.rate)
+                .map(|r| format!("{} kHz", khz(r))),
+            match (pipewire, clock_rate) {
+                (true, Some(r)) => format!("Follows PipeWire ({} kHz)", khz(r)),
+                (true, None) => "Follows PipeWire".into(),
+                (false, _) => "Set globally".into(),
+            },
+        ),
+    ));
+    configured.push(row(
+        "Format",
+        describe(
+            pending("format"),
+            saved
+                .and_then(|s| s.format.as_ref())
+                .map(|f| format!("{} ({f})", f.depth_label())),
+            if pipewire {
+                "Picked by PipeWire".into()
+            } else {
+                "Set globally".into()
+            },
+        ),
+    ));
+    configured.push(row(
+        "Period",
+        describe(
+            pending("period-size"),
+            saved
+                .and_then(|s| s.period_size)
+                .map(|n| format!("{n} frames")),
+            "Default".into(),
+        ),
+    ));
+    if pending("headroom").is_some() || saved.and_then(|s| s.headroom).is_some() {
+        configured.push(row(
+            "Headroom",
+            describe(
+                pending("headroom"),
+                saved
+                    .and_then(|s| s.headroom)
+                    .map(|n| format!("{n} frames")),
+                "Default".into(),
+            ),
+        ));
+    }
+    configured.push(row(
+        "When idle",
+        describe(
+            pending("suspend"),
+            saved
+                .filter(|s| s.disable_suspend)
+                .map(|_| "Kept open".to_string()),
+            "Suspends".into(),
+        ),
+    ));
+
+    // Supports.
+    let caps = &d.capabilities;
+    let mut supports = Vec::new();
+    let src = |source: crate::core::model::Source| s(source.label());
+    let mut rate_rows = Vec::new();
+    match &caps.rates {
+        Some(r) if !r.value.is_unbounded() => {
+            let chips: Vec<Chip> = STANDARD_RATES
+                .iter()
+                .map(|&rate| Chip {
+                    label: s(khz(rate)),
+                    on: r.value.contains(rate),
+                })
+                .collect();
+            for half in chips.chunks(8) {
+                rate_rows.push(ChipRow {
+                    chips: model(half.to_vec()),
+                });
+            }
+            supports.push(KV {
+                key: s("Rates"),
+                value: s("kHz, highlighted if supported"),
+                source: src(r.source),
+            });
+        }
+        Some(r) => supports.push(KV {
+            key: s("Rates"),
+            value: s("Any: PipeWire converts, so this says nothing about the hardware"),
+            source: src(r.source),
+        }),
+        None => supports.push(row("Rates", "Unknown".into())),
+    }
+    match &caps.formats {
+        Some(f) => supports.push(KV {
+            key: s("Formats"),
+            value: s(f
+                .value
+                .iter()
+                .map(|f| format!("{} ({f})", f.depth_label()))
+                .collect::<Vec<_>>()
+                .join(", ")),
+            source: src(f.source),
+        }),
+        None => supports.push(row("Formats", "Unknown".into())),
+    }
+    if let Some(ch) = &caps.channels {
+        supports.push(KV {
+            key: s("Channels"),
+            value: s(ch
+                .value
+                .iter()
+                .map(u32::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")),
+            source: src(ch.source),
+        });
+    }
+    for (key, range) in [
+        ("Period", &caps.period_frames),
+        ("Buffer", &caps.buffer_frames),
+    ] {
+        if let Some(r) = range {
+            supports.push(KV {
+                key: s(key),
+                value: s(format!("{}–{} frames", r.value.min, r.value.max)),
+                source: src(r.source),
+            });
+        }
+    }
+
+    // Notices.
+    let mut facts = Vec::new();
+    let fact = |level: &str, text: String| Fact {
+        text: s(text),
+        level: s(level),
+    };
+    match &d.kernel_probe {
+        Some(KernelProbeStatus::Busy) => facts.push(fact(
+            "info",
+            "Another program has it open, so the driver couldn't be asked directly. The details come from PipeWire and /proc/asound instead.".into(),
+        )),
+        Some(KernelProbeStatus::PermissionDenied) => facts.push(fact(
+            "warn",
+            "Ratewise isn't allowed to open this device to ask the driver what it supports. Are you in the `audio` group?".into(),
+        )),
+        Some(KernelProbeStatus::Failed { message }) => {
+            facts.push(fact("warn", format!("Asking the driver failed: {message}.")))
+        }
+        _ => {}
+    }
+    if pipewire && d.pipewire.is_none() && d.kind != DeviceKind::Bluetooth {
+        facts.push(fact(
+            "info",
+            "PipeWire isn't using this device: its card's profile doesn't include it. Pick a profile that does in your sound settings to use it.".into(),
+        ));
+    }
+
+    // Controls.
+    let can_save = |change: Change| plan::availability(&pc, &change, Some(d)).1;
+    let mut edit_why = String::new();
+    if pipewire && let Err(why) = can_save(Change::Format(Value::Default)) {
+        edit_why = why;
+    }
+    let editable = edit_why.is_empty();
+    let per_server = |change: Change| -> Result<(), String> {
+        if !editable {
+            return Err(String::new());
+        }
+        if !pipewire && matches!(change, Change::Rate(_) | Change::Format(_)) {
+            return Err(format!(
+                "{} uses one {} for every device. Set it on the Global settings page.",
+                server_name(c.server()),
+                if matches!(change, Change::Rate(_)) {
+                    "sample rate"
+                } else {
+                    "sample format"
+                }
+            ));
+        }
+        can_save(change)
+    };
+
+    let saved_rate = saved.and_then(|s| s.rate);
+    let (rate_opts, rate_why) = match per_server(Change::Rate(Value::Default)) {
+        Ok(()) => {
+            let selected = value_str(match pending("rate") {
+                Some(Change::Rate(v)) => Some(v),
+                _ => None,
+            })
+            .or(saved_rate.map(|r| r.to_string()))
+            .unwrap_or_else(|| "default".into());
+            let top = caps
+                .rates
+                .as_ref()
+                .filter(|r| !r.value.is_unbounded())
+                .and_then(|r| {
+                    COMMON_RATES
+                        .iter()
+                        .rev()
+                        .find(|&&x| r.value.contains(x))
+                        .copied()
+                })
+                .unwrap_or(192_000)
+                .max(192_000);
+            let mut opts = vec![opt(
+                "default",
+                "Default",
+                selected == "default",
+                Ok(vec![match clock_rate {
+                    Some(r) => format!("Follow PipeWire's rate ({} kHz now).", khz(r)),
+                    None => "Follow PipeWire's rate.".into(),
+                }]),
+            )];
+            for r in COMMON_RATES.iter().copied().filter(|&r| r <= top) {
+                opts.push(opt(
+                    r.to_string(),
+                    khz(r),
+                    selected == r.to_string(),
+                    checked(&pc, Change::Rate(Value::Set(r)), Some(d)),
+                ));
+            }
+            (opts, String::new())
+        }
+        Err(why) => (Vec::new(), why),
+    };
+
+    let (format_opts, format_why) = match per_server(Change::Format(Value::Default)) {
+        Ok(()) => {
+            let selected = match pending("format") {
+                Some(Change::Format(Value::Set(f))) => f.alsa_name().to_string(),
+                Some(_) => "default".into(),
+                None => saved
+                    .and_then(|s| s.format.as_ref())
+                    .map(|f| f.alsa_name().to_string())
+                    .unwrap_or_else(|| "default".into()),
+            };
+            let mut opts = vec![opt(
+                "default",
+                "Default",
+                selected == "default",
+                Ok(vec![
+                    "Let PipeWire pick the best format the device supports.".into(),
+                ]),
+            )];
+            for (f, label) in FORMATS {
+                let check =
+                    checked(&pc, Change::Format(Value::Set(f.clone())), Some(d)).map(|mut w| {
+                        w.insert(0, format!("{} in ALSA terms.", f.alsa_name()));
+                        w
+                    });
+                opts.push(opt(f.alsa_name(), label, selected == f.alsa_name(), check));
+            }
+            (opts, String::new())
+        }
+        Err(why) => (Vec::new(), why),
+    };
+
+    let frames_opts =
+        |name: &str, change: fn(Value<u32>) -> Change, current: Option<u32>, values: &[u32]| {
+            match per_server(change(Value::Default)) {
+                Ok(()) => {
+                    let selected = match c.edits.find(name, Some(&d.id)) {
+                        Some(Change::PeriodSize(v) | Change::Headroom(v)) => value_str(Some(v)),
+                        _ => None,
+                    }
+                    .or(current.map(|n| n.to_string()))
+                    .unwrap_or_else(|| "default".into());
+                    let mut opts =
+                        vec![opt("default", "Default", selected == "default", Ok(vec![]))];
+                    for &n in values {
+                        opts.push(opt(
+                            n.to_string(),
+                            n.to_string(),
+                            selected == n.to_string(),
+                            checked(&pc, change(Value::Set(n)), Some(d)),
+                        ));
+                    }
+                    (opts, String::new())
+                }
+                Err(why) => (Vec::new(), why),
+            }
+        };
+    let (period_opts, period_why) = frames_opts(
+        "period-size",
+        Change::PeriodSize,
+        saved.and_then(|s| s.period_size),
+        &[64, 128, 256, 512, 1024, 2048, 4096],
+    );
+    let (headroom_opts, headroom_why) = frames_opts(
+        "headroom",
+        Change::Headroom,
+        saved.and_then(|s| s.headroom),
+        &[256, 512, 1024, 2048, 4096, 8192],
+    );
+
+    let (suspend_opts, suspend_why) = match per_server(Change::Suspend(Value::Default)) {
+        Ok(()) => {
+            let off = match pending("suspend") {
+                Some(Change::Suspend(v)) => *v == Value::Set(false),
+                _ => saved.is_some_and(|s| s.disable_suspend),
+            };
+            (
+                vec![
+                    opt("default", "Suspend when idle", !off, Ok(vec!["PipeWire's default: closes the device after a few seconds of silence.".into()])),
+                    opt("off", "Keep open", off, Ok(vec!["Fixes pops and delays at the start of playback. Uses slightly more power.".into()])),
+                ],
+                String::new(),
+            )
+        }
+        Err(why) => (Vec::new(), why),
+    };
+
+    let raw = serde_json::to_string_pretty(&serde_json::json!({
+        "device": d,
+        "saved": saved,
+    }))
+    .unwrap_or_default();
+
+    let mut subtitle = format!("{} {}", d.kind.label(), d.direction.short());
+    if let Some(a) = &d.alsa {
+        subtitle.push_str(&format!(" · {}", a.hw_id()));
+    }
+    if let Some(p) = &d.pipewire {
+        subtitle.push_str(&format!(" · {}", p.node_name));
+    }
+    let mut tags = Vec::new();
+    if is_default(d) {
+        tags.push(s("Default"));
+    }
+
+    DeviceView {
+        id: s(&d.id),
+        name: s(&d.description),
+        subtitle: s(subtitle),
+        tags: model(tags),
+        running_main: s(running_main),
+        running_detail: s(running_detail),
+        running_source: s(running_source),
+        active: is_active(d),
+        configured: model(configured),
+        supports: model(supports),
+        rate_rows: model(rate_rows),
+        facts: model(facts),
+        edit_why: s(edit_why),
+        rate_opts: model(rate_opts),
+        rate_why: s(rate_why),
+        format_opts: model(format_opts),
+        format_why: s(format_why),
+        period_opts: model(period_opts),
+        period_why: s(period_why),
+        headroom_opts: model(headroom_opts),
+        headroom_why: s(headroom_why),
+        suspend_opts: model(suspend_opts),
+        suspend_why: s(suspend_why),
+        raw: s(raw),
+    }
+}
+
+fn server_name(s: SoundServer) -> &'static str {
+    match s {
+        SoundServer::PipeWire => "PipeWire",
+        SoundServer::PulseAudio => "PulseAudio",
+        SoundServer::Jack => "JACK",
+        SoundServer::Alsa => "ALSA",
+        SoundServer::None => "This system",
+    }
+}
+
+/// The value of a pending change, for "(not applied yet)" rows.
+fn pending_value(c: &Change) -> String {
+    let frames = |v: &Value<u32>| match v {
+        Value::Set(n) => format!("{n} frames"),
+        Value::Default => "Default".into(),
+    };
+    match c {
+        Change::Rate(Value::Set(r)) => format!("{} kHz", khz(*r)),
+        Change::Format(Value::Set(f)) => format!("{} ({f})", f.depth_label()),
+        Change::PeriodSize(v) | Change::Headroom(v) => frames(v),
+        Change::Suspend(Value::Set(false)) => "Kept open".into(),
+        Change::Suspend(_) => "Suspends".into(),
+        _ => "Default".into(),
+    }
+}
+
+// ---- global page -------------------------------------------------------------------
+
+/// The allowed-rates list in effect: pending, else saved, else running.
+pub fn effective_allowed(c: &Ctx) -> Vec<u32> {
+    match c.edits.find("allowed-rates", None) {
+        Some(Change::AllowedRates(Value::Set(rs))) => rs.clone(),
+        Some(_) => Vec::new(),
+        None => c
+            .inputs
+            .saved
+            .global
+            .allowed_rates
+            .clone()
+            .or_else(|| c.clock().and_then(|k| k.allowed_rates.clone()))
+            .unwrap_or_default(),
+    }
+}
+
+/// The quantum the slider shows: pending, else saved, else running.
+pub fn effective_quantum(c: &Ctx) -> u32 {
+    match c.edits.find("quantum", None) {
+        Some(Change::Quantum(Value::Set(q))) => *q,
+        _ => c
+            .inputs
+            .saved
+            .global
+            .quantum
+            .or_else(|| c.clock().and_then(|k| k.quantum))
+            .unwrap_or(1024),
+    }
+}
+
+/// The slider position for a quantum: log2, clamped to 32..8192.
+pub fn quantum_index(q: u32) -> f32 {
+    (q.max(1) as f32).log2().round().clamp(5.0, 13.0)
+}
+
+pub fn clock_view(c: &Ctx) -> ClockView {
+    let pc = c.plan();
+    let g = &c.inputs.saved.global;
+    let clock = c.clock();
+    let server = c.server();
+    let pipewire = server == SoundServer::PipeWire;
+    let avail = |change: Change| plan::availability(&pc, &change, None);
+    let either = |change: Change| {
+        let (live, save) = avail(change);
+        match (live, save) {
+            (Ok(()), _) | (_, Ok(())) => Ok(()),
+            (Err(_), Err(why)) => Err(why),
+        }
+    };
+    let pending = |name: &str| c.edits.find(name, None);
+
+    let intro = match server {
+        SoundServer::PipeWire => {
+            "These apply to every device. Apply them live to try them until PipeWire restarts, or save them permanently."
+        }
+        SoundServer::PulseAudio => {
+            "PulseAudio uses one rate and format for every device. Changes are saved in ~/.config/pulse and take effect when PulseAudio restarts."
+        }
+        SoundServer::Alsa => {
+            "No sound server is running, so these are ALSA's defaults for programs that share a device. They're saved in ~/.asoundrc."
+        }
+        SoundServer::Jack => {
+            "A standalone JACK server owns audio. Change its settings with your JACK tool (such as QjackCtl)."
+        }
+        SoundServer::None => crate::core::model::NO_DEVICES_MESSAGE,
+    };
+
+    // Default rate.
+    let (rate_opts, rate_why) = match either(Change::Rate(Value::Default)) {
+        Ok(()) => {
+            let selected = value_str(match pending("rate") {
+                Some(Change::Rate(v)) => Some(v),
+                _ => None,
+            })
+            .or(g.rate.map(|r| r.to_string()))
+            .unwrap_or_else(|| "default".into());
+            let label = match clock.and_then(|k| k.rate) {
+                Some(r) if g.rate.is_none() => format!("Default ({})", khz(r)),
+                _ => "Default".into(),
+            };
+            let mut opts = vec![opt("default", label, selected == "default", Ok(vec![]))];
+            for r in [44_100, 48_000, 88_200, 96_000, 176_400, 192_000] {
+                opts.push(opt(
+                    r.to_string(),
+                    format!("{} kHz", khz(r)),
+                    selected == r.to_string(),
+                    checked(&pc, Change::Rate(Value::Set(r)), None),
+                ));
+            }
+            (opts, String::new())
+        }
+        Err(why) => (Vec::new(), why),
+    };
+
+    // Allowed rates.
+    let (allowed_opts, allowed_why) = match either(Change::AllowedRates(Value::Default)) {
+        Ok(()) => {
+            let now = effective_allowed(c);
+            let opts = [
+                44_100, 48_000, 88_200, 96_000, 176_400, 192_000, 352_800, 384_000,
+            ]
+            .into_iter()
+            .map(|r| {
+                let on = now.contains(&r);
+                let check = match super::edits::global_change("allowed", &r.to_string(), &now) {
+                    Some(ch @ Change::AllowedRates(Value::Set(_))) => checked(&pc, ch, None),
+                    _ => Ok(vec![]),
+                };
+                // Turning a rate off is always possible.
+                let check = if on { check.or(Ok(vec![])) } else { check };
+                opt(r.to_string(), format!("{} kHz", khz(r)), on, check)
+            })
+            .collect();
+            (opts, String::new())
+        }
+        Err(why) => (Vec::new(), why),
+    };
+
+    // Global format (PulseAudio and ALSA; PipeWire sets it per device).
+    let (format_opts, format_why) = if pipewire
+        || matches!(server, SoundServer::Jack | SoundServer::None)
+    {
+        (Vec::new(), String::new())
+    } else {
+        match either(Change::Format(Value::Default)) {
+            Ok(()) => {
+                let selected = match pending("format") {
+                    Some(Change::Format(Value::Set(f))) => f.alsa_name().to_string(),
+                    Some(_) => "default".into(),
+                    None => g
+                        .format
+                        .as_ref()
+                        .map(|f| f.alsa_name().to_string())
+                        .unwrap_or_else(|| "default".into()),
+                };
+                let mut opts = vec![opt("default", "Default", selected == "default", Ok(vec![]))];
+                for (f, label) in FORMATS {
+                    let check = checked(&pc, Change::Format(Value::Set(f.clone())), None);
+                    opts.push(opt(f.alsa_name(), label, selected == f.alsa_name(), check));
+                }
+                (opts, String::new())
+            }
+            Err(why) => (Vec::new(), why),
+        }
+    };
+
+    // Quantum. The slider position is set separately: it's two-way bound.
+    let quantum_ok = either(Change::Quantum(Value::Default));
+    let quantum_label = match (pending("quantum"), g.quantum, clock.and_then(|k| k.quantum)) {
+        (Some(Change::Quantum(Value::Set(n))), _, _) => format!("{n} isn't applied yet."),
+        (Some(_), _, _) => "Going back to the default isn't applied yet.".into(),
+        (None, Some(n), _) => format!("{n} is saved."),
+        (None, None, Some(n)) => format!("Running at {n} now."),
+        _ => String::new(),
+    };
+    let rate_hz = match pending("rate") {
+        Some(Change::Rate(Value::Set(r))) => Some(*r),
+        _ => None,
+    }
+    .or(g.rate)
+    .or(clock.and_then(|k| k.rate))
+    .unwrap_or(48_000);
+    let frames_opts =
+        |name: &str, change: fn(Value<u32>) -> Change, saved: Option<u32>, values: &[u32]| {
+            let selected = match pending(name) {
+                Some(Change::MinQuantum(v) | Change::MaxQuantum(v)) => value_str(Some(v)),
+                _ => None,
+            }
+            .or(saved.map(|n| n.to_string()))
+            .unwrap_or_else(|| "default".into());
+            let mut opts = vec![opt("default", "Default", selected == "default", Ok(vec![]))];
+            for &n in values {
+                opts.push(opt(
+                    n.to_string(),
+                    n.to_string(),
+                    selected == n.to_string(),
+                    checked(&pc, change(Value::Set(n)), None),
+                ));
+            }
+            opts
+        };
+    let (min_opts, max_opts) = if quantum_ok.is_ok() {
+        (
+            frames_opts(
+                "min-quantum",
+                Change::MinQuantum,
+                g.min_quantum,
+                &[16, 32, 64, 128, 256],
+            ),
+            frames_opts(
+                "max-quantum",
+                Change::MaxQuantum,
+                g.max_quantum,
+                &[1024, 2048, 4096, 8192],
+            ),
+        )
+    } else {
+        (Vec::new(), Vec::new())
+    };
+
+    // Forced values: live only.
+    let force_ok = avail(Change::ForceRate(0)).0;
+    let (force_rate_opts, force_quantum_opts, force_why) = match &force_ok {
+        Ok(()) => {
+            let now_rate = match pending("force-rate") {
+                Some(Change::ForceRate(n)) => *n,
+                _ => clock.and_then(|k| k.force_rate).unwrap_or(0),
+            };
+            let now_q = match pending("force-quantum") {
+                Some(Change::ForceQuantum(n)) => *n,
+                _ => clock.and_then(|k| k.force_quantum).unwrap_or(0),
+            };
+            let mut rates = vec![opt("off", "Off", now_rate == 0, Ok(vec![]))];
+            for r in [44_100, 48_000, 88_200, 96_000, 192_000] {
+                rates.push(opt(
+                    r.to_string(),
+                    khz(r),
+                    now_rate == r,
+                    checked(&pc, Change::ForceRate(r), None),
+                ));
+            }
+            let mut qs = vec![opt("off", "Off", now_q == 0, Ok(vec![]))];
+            for n in [64, 128, 256, 512, 1024, 2048] {
+                qs.push(opt(
+                    n.to_string(),
+                    n.to_string(),
+                    now_q == n,
+                    checked(&pc, Change::ForceQuantum(n), None),
+                ));
+            }
+            (rates, qs, String::new())
+        }
+        Err(why) => (Vec::new(), Vec::new(), why.clone()),
+    };
+
+    // Resampler.
+    let (resample_opts, resample_why) = match avail(Change::ResampleQuality(Value::Default)).1 {
+        Ok(()) => {
+            let selected = match pending("resample-quality") {
+                Some(Change::ResampleQuality(v)) => value_str(Some(v)).unwrap_or_default(),
+                _ => g
+                    .resample_quality
+                    .map(|q| q.to_string())
+                    .unwrap_or_else(|| "default".into()),
+            };
+            let mut opts = vec![opt(
+                "default",
+                "Default",
+                selected == "default",
+                Ok(vec!["PipeWire's default is 4.".into()]),
+            )];
+            for q in [0u8, 2, 4, 6, 8, 10, 12, 14] {
+                let tip = match q {
+                    0 => vec!["Fastest, lowest quality.".to_string()],
+                    4 => vec!["PipeWire's default.".to_string()],
+                    14 => vec!["Best quality, most CPU.".to_string()],
+                    _ => vec![],
+                };
+                opts.push(opt(
+                    q.to_string(),
+                    q.to_string(),
+                    selected == q.to_string(),
+                    Ok(tip),
+                ));
+            }
+            (opts, String::new())
+        }
+        Err(why) => (Vec::new(), why),
+    };
+
+    // What's saved.
+    let mut saved = Vec::new();
+    let kv = |key: &str, value: String| KV {
+        key: s(key),
+        value: s(value),
+        source: SharedString::new(),
+    };
+    if let Some(r) = g.rate {
+        saved.push(kv("Rate", format!("{} kHz", khz(r))));
+    }
+    if let Some(rs) = &g.allowed_rates {
+        saved.push(kv("Allowed", format!("{} kHz", rate_list(rs))));
+    }
+    if let Some(f) = &g.format {
+        saved.push(kv("Format", format!("{} ({f})", f.depth_label())));
+    }
+    for (key, v) in [
+        ("Quantum", g.quantum),
+        ("Smallest", g.min_quantum),
+        ("Largest", g.max_quantum),
+    ] {
+        if let Some(n) = v {
+            saved.push(kv(key, format!("{n} frames")));
+        }
+    }
+    if let Some(q) = g.resample_quality {
+        saved.push(kv("Resampler", format!("quality {q}")));
+    }
+    for d in c.inputs.saved.devices.values() {
+        let mut parts = Vec::new();
+        if let Some(r) = d.rate {
+            parts.push(format!("{} kHz", khz(r)));
+        }
+        if let Some(f) = &d.format {
+            parts.push(f.alsa_name().to_string());
+        }
+        if let Some(n) = d.period_size {
+            parts.push(format!("period {n}"));
+        }
+        if let Some(n) = d.headroom {
+            parts.push(format!("headroom {n}"));
+        }
+        if d.disable_suspend {
+            parts.push("kept open when idle".into());
+        }
+        saved.push(kv(&d.description, parts.join(" · ")));
+    }
+    let can_reset = c.read_only.is_none() && plan::plan_reset(&pc).is_ok_and(|p| !p.is_empty());
+
+    ClockView {
+        server: s(server_name(server)),
+        intro: s(intro),
+        rate_opts: model(rate_opts),
+        rate_why: s(rate_why),
+        allowed_opts: model(allowed_opts),
+        allowed_why: s(allowed_why),
+        format_opts: model(format_opts),
+        format_why: s(format_why),
+        quantum_show: quantum_ok.is_ok(),
+        quantum_label: s(quantum_label),
+        quantum_why: s(quantum_ok.err().unwrap_or_default()),
+        rate_hz: rate_hz as i32,
+        min_opts: model(min_opts),
+        max_opts: model(max_opts),
+        force_rate_opts: model(force_rate_opts),
+        force_quantum_opts: model(force_quantum_opts),
+        force_why: s(force_why),
+        resample_opts: model(resample_opts),
+        resample_why: s(resample_why),
+        saved: model(saved),
+        can_reset,
+    }
+}
+
+// ---- action bar --------------------------------------------------------------------
+
+pub struct Pending {
+    pub count: usize,
+    pub summary: String,
+    pub can_live: bool,
+    pub can_save: bool,
+    /// Why neither button works, or what's in the way.
+    pub why: String,
+}
+
+/// The edits with their devices looked up. Edits for devices that went away are dropped.
+pub fn resolved<'a>(c: &'a Ctx) -> Vec<(Change, Option<&'a Device>)> {
+    c.edits
+        .list()
+        .iter()
+        .filter_map(|e| match &e.device {
+            None => Some((e.change.clone(), None)),
+            Some(id) => c
+                .inputs
+                .snapshot
+                .devices
+                .iter()
+                .find(|d| d.id == *id)
+                .map(|d| (e.change.clone(), Some(d))),
+        })
+        .collect()
+}
+
+pub fn pending(c: &Ctx) -> Pending {
+    let items = resolved(c);
+    let pc = c.plan();
+    let summary = items
+        .iter()
+        .map(|(ch, d)| ch.describe(*d))
+        .collect::<Vec<_>>()
+        .join("; ");
+    let mut live_err = None;
+    let mut save_err = None;
+    for (ch, d) in &items {
+        let (live, save) = plan::availability(&pc, ch, *d);
+        if let (Err(e), None) = (live, &live_err) {
+            live_err = Some(format!("{}: {e}", capitalise(&ch.describe(*d))));
+        }
+        if let (Err(e), None) = (save, &save_err) {
+            save_err = Some(e);
+        }
+    }
+    let any = !items.is_empty();
+    let why = match (c.read_only, &live_err, &save_err) {
+        _ if !any => String::new(),
+        (Some(r), _, _) => r.to_string(),
+        (None, Some(_), Some(e)) => e.clone(),
+        _ => String::new(),
+    };
+    Pending {
+        count: items.len(),
+        summary: capitalise(&summary),
+        can_live: any && c.read_only.is_none() && live_err.is_none(),
+        can_save: any && c.read_only.is_none() && save_err.is_none(),
+        why,
+    }
+}
+
+fn capitalise(s: &str) -> String {
+    let mut c = s.chars();
+    match c.next() {
+        Some(f) => f.to_uppercase().chain(c).collect(),
+        None => String::new(),
+    }
+}
+
+/// Notices across the top of the window.
+pub fn banner(c: &Ctx, fixture: Option<&std::path::Path>, errors: &[String]) -> Vec<Fact> {
+    let mut out = Vec::new();
+    let mut push = |level: &str, text: String| {
+        out.push(Fact {
+            text: s(text),
+            level: s(level),
+        })
+    };
+    // The fixture note and why nothing can be applied go on one line.
+    let mut first = fixture
+        .map(|dir| {
+            format!(
+                "Showing a captured system ({}), not this computer.",
+                dir.display()
+            )
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+    if c.inputs.sandbox {
+        first.push(crate::app::sandbox_note(&c.inputs.paths));
+    } else if let Some(r) = c.read_only {
+        first.push(r.to_string());
+    }
+    if !first.is_empty() {
+        push("info", first.join(" "));
+    }
+    if let Some(e) = &c.inputs.saved_error {
+        push("warn", e.clone());
+    }
+    if c.inputs.pulse_override && c.server() == SoundServer::PulseAudio {
+        push("warn", "PULSE_CONFIG is set, so PulseAudio reads its settings from somewhere else and Ratewise can't change them.".into());
+    }
+    for e in errors {
+        push("warn", e.clone());
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::paths::Paths;
+    use crate::core::settings::SavedConfig;
+    use crate::probe::Probes;
+    use slint::Model;
+
+    fn inputs(fixture: &str) -> Inputs {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures")
+            .join(fixture);
+        Inputs {
+            snapshot: Probes::fixture(&dir).snapshot(),
+            paths: Paths::new("/home/user".into(), None, None),
+            saved: SavedConfig::default(),
+            saved_error: None,
+            files: Default::default(),
+            system_pulse: None,
+            tools: vec!["pw-metadata".into(), "systemctl".into()],
+            pulse_override: false,
+            sandbox: false,
+            latest_backup: None,
+        }
+    }
+
+    fn labels(m: &ModelRc<Opt>) -> Vec<(String, bool, bool)> {
+        m.iter()
+            .map(|o| (o.label.to_string(), o.enabled, o.selected))
+            .collect()
+    }
+
+    #[test]
+    fn sidebar_groups_outputs_inputs_and_pages() {
+        let i = inputs("pw-1.2-desktop");
+        let nav = nav(&i);
+        let kinds: Vec<String> = nav
+            .iter()
+            .map(|n| format!("{}:{}", n.kind, n.title))
+            .collect();
+        assert_eq!(kinds[0], "header:OUTPUTS");
+        assert!(kinds.contains(&"header:INPUTS".to_string()));
+        assert_eq!(kinds.last().unwrap(), "page:About this system");
+        let d50 = nav
+            .iter()
+            .find(|n| n.title == "D50s Analog Stereo")
+            .unwrap();
+        assert_eq!(d50.badge, "USB · 96 kHz · 32-bit");
+        assert_eq!(d50.tag, "Default");
+        assert!(d50.active);
+    }
+
+    #[test]
+    fn device_options_grey_out_what_the_hardware_cant_do() {
+        let i = inputs("pw-1.2-desktop");
+        let edits = Edits::default();
+        let c = Ctx {
+            inputs: &i,
+            edits: &edits,
+            read_only: None,
+        };
+        let d = i
+            .snapshot
+            .devices
+            .iter()
+            .find(|d| d.id.contains("D50s"))
+            .unwrap();
+        let v = device_view(&c, d);
+        let rates = labels(&v.rate_opts);
+        assert_eq!(rates[0], ("Default".into(), true, true));
+        assert!(rates.contains(&("96".into(), true, false)));
+        assert!(
+            rates.contains(&("768".into(), true, false)),
+            "the D50s goes to 768 kHz"
+        );
+        let formats = labels(&v.format_opts);
+        assert!(
+            formats.contains(&("16-bit".into(), false, false)),
+            "{formats:?}"
+        );
+        assert!(formats.contains(&("32-bit".into(), true, false)));
+        let tip = v
+            .format_opts
+            .iter()
+            .find(|o| o.label == "16-bit")
+            .unwrap()
+            .tip;
+        assert!(tip.contains("doesn't support S16_LE"), "{tip}");
+        assert_eq!(v.running_main, "96 kHz · 32-bit");
+
+        let bt = i
+            .snapshot
+            .devices
+            .iter()
+            .find(|d| d.kind == DeviceKind::Bluetooth)
+            .unwrap();
+        let v = device_view(&c, bt);
+        assert!(v.edit_why.contains("Bluetooth"), "{}", v.edit_why);
+        assert_eq!(v.rate_opts.row_count(), 0);
+    }
+
+    #[test]
+    fn pulseaudio_devices_point_to_the_global_page() {
+        let i = inputs("pulseaudio-only");
+        let edits = Edits::default();
+        let c = Ctx {
+            inputs: &i,
+            edits: &edits,
+            read_only: None,
+        };
+        let v = device_view(&c, &i.snapshot.devices[0]);
+        assert!(v.rate_why.contains("Global settings"), "{}", v.rate_why);
+        let g = clock_view(&c);
+        assert!(g.format_opts.row_count() > 0);
+        assert!(!g.quantum_show);
+        assert!(g.quantum_why.contains("per program"), "{}", g.quantum_why);
+    }
+
+    #[test]
+    fn pending_edits_decide_the_buttons() {
+        let i = inputs("pw-1.2-desktop");
+        let mut edits = Edits::default();
+        let clock = i.snapshot.clock.as_ref().map(|c| &c.value);
+        edits.set(
+            super::super::edits::Edit {
+                change: Change::Quantum(Value::Set(256)),
+                device: None,
+            },
+            &i.saved,
+            clock,
+            None,
+        );
+        let c = Ctx {
+            inputs: &i,
+            edits: &edits,
+            read_only: None,
+        };
+        let p = pending(&c);
+        assert!(p.can_live && p.can_save, "{}", p.why);
+
+        let d50 = i
+            .snapshot
+            .devices
+            .iter()
+            .find(|d| d.id.contains("D50s"))
+            .unwrap();
+        edits.set(
+            super::super::edits::Edit {
+                change: Change::Suspend(Value::Set(false)),
+                device: Some(d50.id.clone()),
+            },
+            &i.saved,
+            clock,
+            Some(d50),
+        );
+        let c = Ctx {
+            inputs: &i,
+            edits: &edits,
+            read_only: None,
+        };
+        let p = pending(&c);
+        assert_eq!(p.count, 2);
+        assert!(!p.can_live && p.can_save);
+
+        let c = Ctx {
+            inputs: &i,
+            edits: &edits,
+            read_only: Some("read only"),
+        };
+        let p = pending(&c);
+        assert!(!p.can_save && p.why == "read only");
+    }
+}

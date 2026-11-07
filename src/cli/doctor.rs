@@ -172,6 +172,14 @@ pub fn report(probes: &Probes) -> String {
         (None, None) => "none. The GUI won't open; the CLI works.".into(),
     };
     let _ = writeln!(s, "  {:<W$} {display}", "Display");
-    let _ = writeln!(s, "  {:<W$} not built yet", "GUI renderer");
+    let renderer = if !cfg!(feature = "gui") {
+        "none: this build has no window"
+    } else if std::env::var("RATEWISE_RENDERER").as_deref() == Ok("software") {
+        "software (forced by RATEWISE_RENDERER=software)"
+    } else {
+        "OpenGL (FemtoVG), switching to software automatically if OpenGL fails. \
+         RATEWISE_RENDERER=software forces software."
+    };
+    let _ = writeln!(s, "  {:<W$} {renderer}", "GUI renderer");
     s
 }

@@ -686,3 +686,46 @@ fn warnings_for_unusual_values() {
         .unwrap();
     assert!(p.notes[0].contains("resample for them"), "{:?}", p.notes);
 }
+
+#[test]
+fn a_batch_of_edits_is_one_plan_with_one_restart() {
+    // The window collects edits and applies them together.
+    let mut w = World::new("pw-1.2-desktop");
+    let d50s = w.device("D50s");
+    let edits = [
+        (Change::Quantum(Value::Set(256)), None),
+        (Change::Suspend(Value::Set(false)), Some(&d50s)),
+        (Change::AllowedRates(Value::Set(vec![96_000, 44_100])), None),
+    ];
+    let p = plan::plan_batch(&w.ctx(), &edits, Mode::Save).unwrap();
+    let text = render_plan(&p, &w.paths);
+    assert_golden("plan/pw-1.2-desktop-batch.txt", &text);
+    let writes: Vec<_> = p.steps.iter().filter_map(Step::path).collect();
+    assert_eq!(
+        writes,
+        [
+            w.paths.pipewire_dropin().as_path(),
+            w.paths.wireplumber_05().as_path(),
+            w.paths.saved().as_path(),
+        ],
+        "each file is written once"
+    );
+    assert!(p.restart.is_some());
+    w.apply(&p);
+    assert_eq!(w.saved.global.quantum, Some(256));
+    assert_eq!(w.saved.global.allowed_rates, Some(vec![44_100, 96_000]));
+
+    // The window's version has no title and no command-line hints.
+    let window = plan::render_plan_window(&p, &w.paths);
+    assert!(!window.contains("--restart") && !window.contains("ratewise revert"));
+
+    let none = plan::plan_batch(&w.ctx(), &[], Mode::Save).unwrap_err();
+    assert!(none.0.contains("no changes"), "{}", none.0);
+    // One bad edit refuses the whole batch.
+    let bt = w.device("Bluetooth");
+    let bad = [
+        (Change::Quantum(Value::Set(512)), None),
+        (Change::PeriodSize(Value::Set(256)), Some(&bt)),
+    ];
+    assert!(plan::plan_batch(&w.ctx(), &bad, Mode::Save).is_err());
+}

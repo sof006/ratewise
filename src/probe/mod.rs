@@ -100,9 +100,14 @@ impl Probes {
 
     /// Runs every probe once.
     pub fn gather(&self) -> Gathered {
+        self.gather_with_kernel(self.kernel())
+    }
+
+    /// Runs every probe except the kernel one, using `kernel` instead. Probing the
+    /// kernel opens idle devices, so pollers reuse an earlier reading.
+    pub fn gather_with_kernel(&self, kernel: Result<Vec<KernelPcmProbe>, KernelError>) -> Gathered {
         let procfs = self.procfs();
         let pipewire = self.pipewire();
-        let kernel = self.kernel();
         let env = self.env.env_facts();
         let have_cards = procfs.as_ref().is_ok_and(|p| !p.cards.is_empty());
         let stack = crate::core::stack::detect(pipewire.as_ref().ok(), &env, have_cards);

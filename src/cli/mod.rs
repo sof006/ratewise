@@ -1,7 +1,7 @@
 //! Command-line interface (spec §7). This is the binary edge: it prints, and uses `anyhow`.
 
 mod capture;
-mod doctor;
+pub mod doctor;
 pub mod list;
 pub mod set;
 
@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use anyhow::bail;
 use clap::{Args, Parser, Subcommand};
 
+use crate::app::{Env, Session};
 use crate::core::model::SampleFormat;
 use crate::core::settings::{Change, Mode, Value};
 use crate::probe::Probes;
@@ -33,6 +34,15 @@ pub struct Cli {
     /// them (for development and trying changes safely).
     #[arg(long, global = true, hide = true, env = "RATEWISE_SANDBOX")]
     pub sandbox: Option<PathBuf>,
+
+    /// Open the window, render one frame to a PNG, check it, and exit (for launch tests).
+    #[arg(long)]
+    pub self_test: bool,
+
+    /// Render the window to this PNG and exit (for development). `RATEWISE_PAGE` picks
+    /// the page: `device:<id>`, `global`, `doctor` or `review`.
+    #[arg(long, hide = true, value_name = "PNG")]
+    pub screenshot: Option<PathBuf>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -364,12 +374,12 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
             capture::run(&dir)
         }
         Some(Command::Show { device, json }) => {
-            let env = set::Env::new(fixture, sandbox, false).ok();
-            set::show(&probes, env.as_ref(), &device, json)
+            let env = Env::new(fixture, sandbox, false).ok();
+            set::show(&probes, env.as_ref().map(|e| &e.paths), &device, json)
         }
         Some(Command::Set { setting }) => {
             let (change, opts) = setting.into_parts();
-            let env = set::Env::new(fixture, sandbox, true)?;
+            let mut session = Session::new(probes, Env::new(fixture, sandbox, true)?);
             let req = set::Request {
                 change,
                 device: opts.device.as_deref(),
@@ -377,11 +387,11 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
                 restart: opts.restart,
                 dry_run: false,
             };
-            set::set(&probes, &env, req)
+            set::set(&mut session, req)
         }
         Some(Command::Plan { setting }) => {
             let (change, opts) = setting.into_parts();
-            let env = set::Env::new(fixture, sandbox, false)?;
+            let mut session = Session::new(probes, Env::new(fixture, sandbox, false)?);
             let req = set::Request {
                 change,
                 device: opts.device.as_deref(),
@@ -389,21 +399,41 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
                 restart: false,
                 dry_run: true,
             };
-            set::set(&probes, &env, req)
+            set::set(&mut session, req)
         }
         Some(Command::Revert { opts }) => {
-            let env = set::Env::new(fixture, sandbox, !opts.dry_run)?;
-            set::revert(&probes, &env, opts.restart, opts.dry_run)
+            let env = Env::new(fixture, sandbox, !opts.dry_run)?;
+            set::revert(&mut Session::new(probes, env), opts.restart, opts.dry_run)
         }
         Some(Command::Reset { opts }) => {
-            let env = set::Env::new(fixture, sandbox, !opts.dry_run)?;
-            set::reset(&probes, &env, opts.restart, opts.dry_run)
+            let env = Env::new(fixture, sandbox, !opts.dry_run)?;
+            set::reset(&mut Session::new(probes, env), opts.restart, opts.dry_run)
         }
-        None => bail!(
-            "The graphical interface isn't available yet. For now, try `ratewise list`, \
-             `ratewise doctor` or `ratewise set --help`."
-        ),
+        None => gui(cli.fixture, cli.sandbox, cli.screenshot, cli.self_test),
     }
+}
+
+#[cfg(feature = "gui")]
+fn gui(
+    fixture: Option<PathBuf>,
+    sandbox: Option<PathBuf>,
+    screenshot: Option<PathBuf>,
+    self_test: bool,
+) -> anyhow::Result<()> {
+    crate::gui::run(crate::gui::Options {
+        fixture,
+        sandbox,
+        screenshot,
+        self_test,
+    })
+}
+
+#[cfg(not(feature = "gui"))]
+fn gui(_: Option<PathBuf>, _: Option<PathBuf>, _: Option<PathBuf>, _: bool) -> anyhow::Result<()> {
+    bail!(
+        "This build of Ratewise has no graphical interface. Try `ratewise list`, \
+         `ratewise doctor` or `ratewise set --help`."
+    )
 }
 
 /// Writes to stdout. A closed pipe (`ratewise list | head`) is not an error.
