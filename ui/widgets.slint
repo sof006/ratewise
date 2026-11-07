@@ -1,5 +1,6 @@
-// Small building blocks shared by the pages. Colours come from the std-widgets
-// Palette, so light and dark both work; spacing follows an 8 px grid.
+// Building blocks shared by the pages: the colour and type tokens, icons, buttons and
+// controls. Everything is drawn here rather than taken from std-widgets, so the app
+// looks the same on every system. Spacing follows a 4/8 px grid.
 
 import { Palette } from "std-widgets.slint";
 
@@ -15,9 +16,12 @@ export struct Opt {
 export struct Chip {
     label: string,
     on: bool,
+    // The rate the device is running at now.
+    current: bool,
 }
 
 export struct ChipRow {
+    label: string,
     chips: [Chip],
 }
 
@@ -33,120 +37,436 @@ export struct Fact {
     level: string,
 }
 
+// A number with its unit, e.g. 48 + kHz.
+export struct Stat {
+    label: string,
+    value: string,
+    unit: string,
+}
+
+// One line of a plan in the review sheet. `kind` is head, step, why, hunk, add, del,
+// ctx, note, text or gap.
+export struct Line {
+    text: string,
+    kind: string,
+}
+
 export global Theme {
     // Set from Rust to the system's monospace family; Slint has no generic "monospace".
     in-out property <string> mono: "DejaVu Sans Mono";
-    out property <length> radius: 8px;
+    // From the background, because the scheme reads "unknown" while it follows the system.
+    out property <bool> dark: Palette.background.to-hsv().value < 0.5;
+
+    // Surfaces, from back to front.
+    out property <color> canvas: self.dark ? #161615 : #f9f8f6;
+    out property <color> rail: self.dark ? #1b1b1a : #f1f0ec;
+    out property <color> surface: self.dark ? #201f1e : #ffffff;
+    out property <color> sunken: self.dark ? #121211 : #efeee9;
+    out property <color> hover: self.dark ? #2a2927 : #e9e7e1;
+    // A filled cell, e.g. a supported rate.
+    out property <color> fill: self.dark ? #2d2c29 : #efeee9;
+    out property <color> line: self.dark ? #2e2d2a : #e3e1db;
+    out property <color> line-strong: self.dark ? #3d3c38 : #cfccc4;
+
+    // Ink: text, and the fill of whatever is selected.
+    out property <color> ink: self.dark ? #edebe6 : #1c1b19;
+    out property <color> on-ink: self.dark ? #161615 : #faf9f7;
+    out property <color> muted: self.dark ? #a29e96 : #67645d;
+    out property <color> faint: self.dark ? #66635d : #a5a199;
+
+    // Colour only carries meaning: playing, warning, error, and diffs.
+    out property <color> signal: self.dark ? #52c48c : #1b7f4d;
+    out property <color> signal-soft: self.dark ? #1a2e22 : #e2f1e7;
+    out property <color> warn: self.dark ? #e8b064 : #925600;
+    out property <color> warn-soft: self.dark ? #322818 : #faf0dc;
+    out property <color> danger: self.dark ? #ff8f85 : #b02a20;
+    out property <color> danger-soft: self.dark ? #3a1f1d : #fbe8e5;
+    out property <color> add-bg: self.dark ? #172c1f : #e7f3eb;
+    out property <color> add-fg: self.dark ? #8fd8ab : #17643a;
+    out property <color> del-bg: self.dark ? #361d1b : #fbebe8;
+    out property <color> del-fg: self.dark ? #ffa69d : #9b261d;
+    out property <color> focus: self.dark ? #edebe6 : #1c1b19;
+
+    out property <length> radius: 10px;
     out property <length> small-radius: 6px;
     out property <length> gap: 8px;
     out property <length> pad: 16px;
+
+    out property <length> display: 40px;
+    out property <length> title: 22px;
+    out property <length> heading: 15px;
     out property <length> body: 13px;
-    out property <length> small: 11.5px;
-    out property <color> muted: Palette.foreground.transparentize(0.4);
-    out property <color> faint: Palette.foreground.transparentize(0.75);
-    out property <color> card: Palette.alternate-background;
-    out property <color> line: Palette.border;
-    out property <color> accent: Palette.accent-background;
-    out property <color> on-accent: Palette.accent-foreground;
-    // From the background, because the scheme reads "unknown" while it follows the system.
-    out property <bool> dark: Palette.background.to-hsv().value < 0.5;
-    out property <color> warn: self.dark ? #f0b45a : #a35a00;
-    out property <color> warn-bg: self.dark ? #3a2a10 : #fff3df;
-    out property <color> danger: self.dark ? #ff8a80 : #b3261e;
-    out property <color> good: self.dark ? #7fd18b : #1e7d32;
+    out property <length> small: 12px;
+    out property <length> micro: 11px;
 }
 
-// A titled panel.
-export component Card inherits Rectangle {
-    in property <string> title;
-    in property <string> subtitle;
-    background: Theme.card;
-    border-radius: Theme.radius;
-    border-width: 1px;
-    border-color: Theme.line;
-    VerticalLayout {
-        padding: Theme.pad;
-        spacing: Theme.gap;
-        if root.title != "": Text {
-            text: root.title;
-            font-size: 14px;
-            font-weight: 600;
-            color: Palette.foreground;
-        }
-        if root.subtitle != "": Text {
-            text: root.subtitle;
-            font-size: Theme.small;
-            color: Theme.muted;
-            wrap: word-wrap;
-        }
-        @children
+// A 16×16 line icon, drawn so it needs no image files.
+export component Icon {
+    in property <string> name;
+    in property <color> color: Theme.muted;
+    in property <length> size: 16px;
+    in property <length> stroke: 1.5px;
+    width: root.size;
+    height: root.size;
+    Path {
+        width: root.size;
+        height: root.size;
+        viewbox-width: 16;
+        viewbox-height: 16;
+        stroke: root.color;
+        stroke-width: root.stroke;
+        stroke-line-cap: round;
+        fill: transparent;
+        commands: root.name == "usb" ? "M5.5 1.5h5v4.5h-5z M7 3.5v0.5 M9 3.5v0.5 M3.5 6h9v4.5a3 3 0 0 1-3 3h-3a3 3 0 0 1-3-3z M8 13.5v1.5"
+            : root.name == "hdmi" ? "M1.5 5h13v3.5l-2.5 2.5h-8l-2.5-2.5z M4.5 7.5h7"
+            : root.name == "builtin" ? "M2 6h2.5l3.5-3v10l-3.5-3h-2.5z M10.8 5.6a3.3 3.3 0 0 1 0 4.8 M12.6 3.6a6 6 0 0 1 0 8.8"
+            : root.name == "bluetooth" ? "M4.5 5l7 6-3.5 3v-12l3.5 3-7 6"
+            : root.name == "mic" ? "M6 4a2 2 0 0 1 4 0v3.5a2 2 0 0 1-4 0z M3.5 7.5a4.5 4.5 0 0 0 9 0 M8 12v2.5"
+            : root.name == "sliders" ? "M2 4.5h6.5 M12.5 4.5h1.5 M2 11.5h1.5 M7.5 11.5h6.5 M10.5 3a1.5 1.5 0 1 0 0.01 0z M5.5 10a1.5 1.5 0 1 0 0.01 0z"
+            : root.name == "pulse" ? "M1.5 8h3l1.5-4 3 8 1.5-4h4"
+            : root.name == "refresh" ? "M13 8a5 5 0 1 1-1.46-3.54 M13.2 2.2v3h-3"
+            : root.name == "sun" ? "M8 5.2a2.8 2.8 0 1 0 0.01 0z M8 1.5v1.2 M8 13.3v1.2 M1.5 8h1.2 M13.3 8h1.2 M3.4 3.4l0.85 0.85 M11.75 11.75l0.85 0.85 M3.4 12.6l0.85-0.85 M11.75 4.25l0.85-0.85"
+            : root.name == "moon" ? "M13 9.6a5.5 5.5 0 0 1-6.6-6.6 5.5 5.5 0 1 0 6.6 6.6z"
+            : root.name == "auto" ? "M8 2.5a5.5 5.5 0 1 0 0.01 0z M8 2.5v11"
+            : root.name == "info" ? "M8 2a6 6 0 1 0 0.01 0z M8 7.2v4 M8 4.9v0.1"
+            : root.name == "warn" ? "M8 2l6.5 11.5h-13z M8 6.5v3 M8 11.5v0.1"
+            : root.name == "check" ? "M3 8.5l3 3 7-7"
+            : root.name == "logo" ? "M1 9.5h2v-4h2v-2h2v4h2v4.5h2v-2.5h2v-2h2"
+            : root.name == "empty" ? "M2 10h2.5l1.5-3 2 6 2-9 1.5 6h2.5"
+            : "M8 2.5a5.5 5.5 0 1 0 0.01 0z";
     }
 }
 
-// A small rounded label.
+// A focus ring drawn just outside its parent.
+component FocusRing inherits Rectangle {
+    in property <bool> show;
+    in property <length> corner: Theme.small-radius;
+    x: -3px;
+    y: -3px;
+    border-radius: self.corner + 3px;
+    border-width: root.show ? 2px : 0px;
+    border-color: Theme.focus.transparentize(0.45);
+}
+
+// A push button. `kind` is primary, secondary, ghost or danger.
+export component Button inherits Rectangle {
+    in property <string> text;
+    in property <string> icon;
+    in property <string> kind: "secondary";
+    in property <bool> enabled: true;
+    callback clicked();
+    property <bool> primary: root.kind == "primary";
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => { if (root.enabled) { root.clicked(); } }
+    height: 32px;
+    min-width: content.preferred-width + 28px;
+    border-radius: Theme.small-radius;
+    opacity: root.enabled ? 1 : 0.4;
+    background: root.primary ? (touch.pressed ? Theme.ink.mix(Theme.canvas, 0.8) : touch.has-hover && root.enabled ? Theme.ink.mix(Theme.canvas, 0.88) : Theme.ink)
+        : root.kind == "secondary" ? (touch.pressed ? Theme.hover : touch.has-hover && root.enabled ? Theme.hover.mix(Theme.surface, 0.5) : Theme.surface)
+        : (touch.pressed ? Theme.hover : touch.has-hover && root.enabled ? Theme.hover.mix(Theme.canvas, 0.6) : transparent);
+    border-width: root.kind == "secondary" ? 1px : 0px;
+    border-color: Theme.line-strong;
+    animate background { duration: 90ms; }
+    FocusRing { width: parent.width + 6px; height: parent.height + 6px; show: focus.has-focus; }
+    content := HorizontalLayout {
+        alignment: center;
+        spacing: 6px;
+        if root.icon != "": VerticalLayout {
+            alignment: center;
+            Icon {
+                name: root.icon;
+                color: label.color;
+            }
+        }
+        label := Text {
+            text: root.text;
+            font-size: Theme.body;
+            font-weight: 600;
+            color: root.primary ? Theme.on-ink : root.kind == "danger" ? Theme.danger : Theme.ink;
+            vertical-alignment: center;
+        }
+    }
+    focus := FocusScope {
+        enabled: root.enabled;
+        key-pressed(e) => {
+            if (e.text == Key.Return || e.text == " ") {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+        touch := TouchArea {
+            enabled: root.enabled;
+            mouse-cursor: root.enabled ? pointer : default;
+            clicked => { root.clicked(); }
+        }
+    }
+}
+
+// A square button with only an icon.
+export component IconButton inherits Rectangle {
+    in property <string> icon;
+    in property <string> label;
+    in property <bool> enabled: true;
+    callback clicked();
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { if (root.enabled) { root.clicked(); } }
+    width: 30px;
+    height: 30px;
+    border-radius: Theme.small-radius;
+    opacity: root.enabled ? 1 : 0.4;
+    background: touch.pressed ? Theme.hover : touch.has-hover && root.enabled ? Theme.hover.mix(Theme.rail, 0.6) : transparent;
+    animate background { duration: 90ms; }
+    FocusRing { width: parent.width + 6px; height: parent.height + 6px; show: focus.has-focus; }
+    Icon {
+        name: root.icon;
+        color: touch.has-hover ? Theme.ink : Theme.muted;
+    }
+    focus := FocusScope {
+        enabled: root.enabled;
+        key-pressed(e) => {
+            if (e.text == Key.Return || e.text == " ") {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+        touch := TouchArea {
+            enabled: root.enabled;
+            mouse-cursor: root.enabled ? pointer : default;
+            clicked => { root.clicked(); }
+        }
+    }
+}
+
+// A tick box with a label. The whole row is clickable.
+export component Check inherits Rectangle {
+    in property <string> text;
+    in-out property <bool> checked;
+    accessible-role: checkbox;
+    accessible-checked: root.checked;
+    accessible-label: root.text;
+    accessible-action-default => { root.checked = !root.checked; }
+    HorizontalLayout {
+        spacing: 10px;
+        VerticalLayout {
+            alignment: center;
+            box := Rectangle {
+                width: 18px;
+                height: 18px;
+                border-radius: 4px;
+                background: root.checked ? Theme.ink : Theme.surface;
+                border-width: root.checked ? 0px : 1.5px;
+                border-color: touch.has-hover ? Theme.ink.transparentize(0.4) : Theme.line-strong;
+                FocusRing { width: parent.width + 6px; height: parent.height + 6px; show: focus.has-focus; corner: 4px; }
+                if root.checked: Icon {
+                    name: "check";
+                    color: Theme.on-ink;
+                    size: 14px;
+                    stroke: 2px;
+                }
+            }
+        }
+        Text {
+            text: root.text;
+            font-size: Theme.body;
+            color: Theme.ink;
+            vertical-alignment: center;
+            wrap: word-wrap;
+            horizontal-stretch: 1;
+        }
+    }
+    focus := FocusScope {
+        key-pressed(e) => {
+            if (e.text == " " || e.text == Key.Return) {
+                root.checked = !root.checked;
+                return accept;
+            }
+            return reject;
+        }
+        touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => {
+                root.checked = !root.checked;
+                focus.focus();
+            }
+        }
+    }
+}
+
+// A small outlined label, e.g. "Default".
 export component Tag inherits Rectangle {
     in property <string> text;
     in property <bool> strong;
     height: 20px;
     width: label.preferred-width + 14px;
-    border-radius: 10px;
-    background: root.strong ? Theme.accent : Palette.foreground.transparentize(0.9);
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: root.strong ? Theme.ink.transparentize(0.5) : Theme.line-strong;
     label := Text {
         text: root.text;
-        font-size: Theme.small;
-        color: root.strong ? Theme.on-accent : Palette.foreground;
+        font-size: Theme.micro;
+        font-weight: 600;
+        color: root.strong ? Theme.ink : Theme.muted;
         vertical-alignment: center;
         horizontal-alignment: center;
     }
 }
 
-// One line of "key   value  [source]".
+// A small upper-case label above a group.
+export component Eyebrow inherits Text {
+    font-size: Theme.micro;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    color: Theme.faint;
+}
+
+// A heading and description above a panel of settings.
+export component Section inherits VerticalLayout {
+    in property <string> title;
+    in property <string> description;
+    spacing: 10px;
+    if root.title != "": VerticalLayout {
+        spacing: 3px;
+        Text {
+            text: root.title;
+            font-size: Theme.heading;
+            font-weight: 600;
+            color: Theme.ink;
+        }
+        if root.description != "": Text {
+            text: root.description;
+            font-size: Theme.small;
+            color: Theme.muted;
+            wrap: word-wrap;
+        }
+    }
+    Rectangle {
+        background: Theme.surface;
+        border-radius: Theme.radius;
+        border-width: 1px;
+        border-color: Theme.line;
+        VerticalLayout {
+            @children
+        }
+    }
+}
+
+// One setting inside a Section: its name and help above the control. Every row but
+// the first has a hairline above it.
+export component Row inherits Rectangle {
+    in property <string> title;
+    in property <string> help;
+    in property <bool> first;
+    // Text after the title, e.g. the current value.
+    in property <string> aside;
+    if !root.first: Rectangle {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: 1px;
+        background: Theme.line;
+    }
+    VerticalLayout {
+        padding-top: 16px;
+        padding-bottom: 10px;
+        padding-left: 20px;
+        padding-right: 20px;
+        spacing: 12px;
+        if root.title != "" || root.help != "": VerticalLayout {
+            spacing: 3px;
+            HorizontalLayout {
+                spacing: 8px;
+                Text {
+                    text: root.title;
+                    font-size: Theme.body;
+                    font-weight: 600;
+                    color: Theme.ink;
+                    horizontal-stretch: 1;
+                    wrap: word-wrap;
+                }
+                if root.aside != "": Text {
+                    text: root.aside;
+                    font-size: Theme.small;
+                    color: Theme.muted;
+                    horizontal-alignment: right;
+                }
+            }
+            if root.help != "": Text {
+                text: root.help;
+                font-size: Theme.small;
+                color: Theme.muted;
+                wrap: word-wrap;
+            }
+        }
+        @children
+    }
+}
+
+export component Why inherits Text {
+    font-size: Theme.small;
+    color: Theme.muted;
+    wrap: word-wrap;
+}
+
+// One line of "key   value   source".
 export component KVRow inherits HorizontalLayout {
     in property <KV> kv;
-    spacing: Theme.gap;
+    in property <length> key-width: 104px;
+    spacing: 12px;
+    padding-top: 3px;
+    padding-bottom: 3px;
     Text {
         text: root.kv.key;
-        width: 96px;
+        width: root.key-width;
         font-size: Theme.body;
         color: Theme.muted;
     }
     Text {
         text: root.kv.value;
         font-size: Theme.body;
-        color: Palette.foreground;
+        color: Theme.ink;
         wrap: word-wrap;
         horizontal-stretch: 1;
     }
     if root.kv.source != "": Text {
-        text: "from " + root.kv.source;
-        font-size: Theme.small;
+        text: root.kv.source;
+        font-size: Theme.micro;
         color: Theme.faint;
         horizontal-alignment: right;
+        vertical-alignment: center;
     }
 }
 
-// A notice line: info or warning.
+// A notice: information or a warning.
 export component FactLine inherits Rectangle {
     in property <Fact> fact;
+    property <bool> warn: root.fact.level == "warn";
     border-radius: Theme.small-radius;
-    background: root.fact.level == "warn" ? Theme.warn-bg : Palette.foreground.transparentize(0.94);
+    background: root.warn ? Theme.warn-soft : Theme.sunken;
     HorizontalLayout {
-        padding: 8px;
+        padding: 10px;
         padding-left: 12px;
-        spacing: 8px;
-        Text {
-            text: root.fact.level == "warn" ? "!" : "i";
-            font-weight: 700;
-            font-size: Theme.body;
-            color: root.fact.level == "warn" ? Theme.warn : Theme.muted;
-            width: 10px;
+        padding-right: 14px;
+        spacing: 10px;
+        VerticalLayout {
+            alignment: start;
+            padding-top: 0px;
+            Icon {
+                name: root.warn ? "warn" : "info";
+                color: root.warn ? Theme.warn : Theme.muted;
+            }
         }
         Text {
             text: root.fact.text;
-            font-size: Theme.body;
-            color: Palette.foreground;
+            font-size: Theme.small;
+            color: root.warn ? Theme.warn : Theme.ink;
             wrap: word-wrap;
             horizontal-stretch: 1;
+            vertical-alignment: center;
         }
     }
 }
@@ -154,23 +474,26 @@ export component FactLine inherits Rectangle {
 // One button of a segmented control. Focusable; Enter or Space picks it.
 component Segment inherits Rectangle {
     in property <Opt> opt;
-    in property <bool> first;
-    in property <bool> last;
     callback picked();
     out property <bool> hovered: touch.has-hover;
-    min-width: label.preferred-width + 20px;
-    height: 30px;
-    border-radius: Theme.small-radius;
-    background: root.opt.selected ? Theme.accent
-        : touch.has-hover && root.opt.enabled ? Palette.foreground.transparentize(0.88)
+    accessible-role: button;
+    accessible-label: root.opt.label;
+    accessible-checked: root.opt.selected;
+    accessible-action-default => { if (root.opt.enabled) { root.picked(); } }
+    min-width: label.preferred-width + 22px;
+    height: 28px;
+    border-radius: 5px;
+    background: root.opt.selected ? Theme.ink
+        : touch.has-hover && root.opt.enabled ? Theme.hover
         : transparent;
-    border-width: focus.has-focus ? 2px : 0px;
-    border-color: Theme.accent.brighter(0.3);
+    animate background { duration: 90ms; }
+    FocusRing { width: parent.width + 6px; height: parent.height + 6px; show: focus.has-focus; corner: 5px; }
     label := Text {
         text: root.opt.label;
         font-size: Theme.body;
-        color: root.opt.selected ? Theme.on-accent
-            : root.opt.enabled ? Palette.foreground : Theme.faint;
+        font-weight: root.opt.selected ? 600 : 400;
+        color: root.opt.selected ? Theme.on-ink
+            : root.opt.enabled ? Theme.ink : Theme.faint;
         horizontal-alignment: center;
         vertical-alignment: center;
     }
@@ -198,21 +521,19 @@ export component Segmented inherits VerticalLayout {
     in property <[Opt]> opts;
     callback picked(string);
     property <string> tip;
-    spacing: 4px;
+    spacing: 6px;
     HorizontalLayout {
         alignment: start;
         Rectangle {
-            border-radius: Theme.small-radius;
+            border-radius: 7px;
+            background: Theme.sunken;
             border-width: 1px;
             border-color: Theme.line;
-            background: Palette.background;
             HorizontalLayout {
                 padding: 2px;
                 spacing: 2px;
-                for o[i] in root.opts: Segment {
+                for o in root.opts: Segment {
                     opt: o;
-                    first: i == 0;
-                    last: i == root.opts.length - 1;
                     picked => { root.picked(o.value); }
                     changed hovered => {
                         if (self.hovered) { root.tip = o.tip; } else if (root.tip == o.tip) { root.tip = ""; }
@@ -226,31 +547,37 @@ export component Segmented inherits VerticalLayout {
         font-size: Theme.small;
         color: Theme.muted;
         wrap: word-wrap;
-        height: 16px;
+        min-height: 15px;
     }
 }
 
-// Toggle chips (several may be on), e.g. allowed rates.
+// Toggles where several may be on, e.g. allowed rates.
 export component ToggleChips inherits VerticalLayout {
     in property <[Opt]> opts;
     callback toggled(string);
     property <string> tip;
-    spacing: 4px;
+    spacing: 6px;
     HorizontalLayout {
         spacing: 6px;
         alignment: start;
         for o in root.opts: Rectangle {
-            property <bool> focused: f.has-focus;
-            height: 28px;
-            min-width: t.preferred-width + 20px;
-            border-radius: 14px;
-            border-width: self.focused ? 2px : 1px;
-            border-color: self.focused ? Theme.accent.brighter(0.3) : o.selected ? Theme.accent : Theme.line;
-            background: o.selected ? Theme.accent : ta.has-hover && o.enabled ? Palette.foreground.transparentize(0.9) : transparent;
+            accessible-role: checkbox;
+            accessible-label: o.label;
+            accessible-checked: o.selected;
+            accessible-action-default => { if (o.enabled) { root.toggled(o.value); } }
+            height: 30px;
+            min-width: t.preferred-width + 24px;
+            border-radius: Theme.small-radius;
+            border-width: 1px;
+            border-color: o.selected ? Theme.ink : Theme.line-strong;
+            background: o.selected ? Theme.ink : ta.has-hover && o.enabled ? Theme.hover : Theme.surface;
+            animate background { duration: 90ms; }
+            FocusRing { width: parent.width + 6px; height: parent.height + 6px; show: f.has-focus; }
             t := Text {
                 text: o.label;
                 font-size: Theme.body;
-                color: o.selected ? Theme.on-accent : o.enabled ? Palette.foreground : Theme.faint;
+                font-weight: o.selected ? 600 : 400;
+                color: o.selected ? Theme.on-ink : o.enabled ? Theme.ink : Theme.faint;
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
@@ -280,62 +607,303 @@ export component ToggleChips inherits VerticalLayout {
         font-size: Theme.small;
         color: Theme.muted;
         wrap: word-wrap;
-        height: 16px;
+        min-height: 15px;
     }
 }
 
-// Read-only chips: which standard rates a device supports.
-export component ChipStrip inherits VerticalLayout {
+// The standard rates as a grid: the 44.1 and 48 kHz families side by side in octaves,
+// then the low rates. Supported rates are filled, the running one is marked.
+export component RateGrid inherits VerticalLayout {
     in property <[ChipRow]> rows;
+    in property <[string]> columns;
     spacing: 6px;
+    HorizontalLayout {
+        spacing: 6px;
+        Rectangle { width: 64px; }
+        for c in root.columns: Text {
+            width: 72px;
+            text: c;
+            font-size: Theme.micro;
+            color: Theme.faint;
+            horizontal-alignment: center;
+        }
+        Rectangle { horizontal-stretch: 1; }
+    }
     for row in root.rows: HorizontalLayout {
         spacing: 6px;
-        alignment: start;
+        Text {
+            width: 64px;
+            text: row.label;
+            font-size: Theme.small;
+            color: Theme.muted;
+            vertical-alignment: center;
+        }
         for c in row.chips: Rectangle {
-            height: 24px;
-            width: max(52px, ct.preferred-width + 16px);
+            width: 72px;
+            height: 30px;
             border-radius: Theme.small-radius;
-            background: c.on ? Theme.accent.transparentize(0.75) : transparent;
-            border-width: 1px;
-            border-color: c.on ? Theme.accent : Theme.line;
-            ct := Text {
-                text: c.label;
-                font-size: Theme.small;
-                color: c.on ? Palette.foreground : Theme.faint;
-                horizontal-alignment: center;
-                vertical-alignment: center;
+            background: c.current ? Theme.signal-soft : c.on ? Theme.fill : transparent;
+            border-width: c.current ? 1.5px : 1px;
+            border-color: c.current ? Theme.signal : c.on ? Theme.line : Theme.line.transparentize(0.3);
+            HorizontalLayout {
+                alignment: center;
+                spacing: 5px;
+                if c.current: VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 6px;
+                        height: 6px;
+                        border-radius: 3px;
+                        background: Theme.signal;
+                    }
+                }
+                Text {
+                    text: c.label;
+                    font-size: Theme.small;
+                    font-weight: c.on ? 600 : 400;
+                    color: c.current ? Theme.signal : c.on ? Theme.ink : Theme.faint;
+                    vertical-alignment: center;
+                }
+            }
+        }
+        Rectangle { horizontal-stretch: 1; }
+    }
+}
+
+// A large number with its unit and a label above.
+export component StatBlock inherits VerticalLayout {
+    in property <Stat> stat;
+    in property <bool> live: true;
+    spacing: 2px;
+    Eyebrow { text: root.stat.label; }
+    HorizontalLayout {
+        spacing: 5px;
+        alignment: start;
+        Text {
+            text: root.stat.value;
+            font-size: Theme.display;
+            font-weight: 600;
+            letter-spacing: -1px;
+            color: root.live ? Theme.ink : Theme.faint;
+        }
+        if root.stat.unit != "": VerticalLayout {
+            alignment: end;
+            padding-bottom: 8px;
+            Text {
+                text: root.stat.unit;
+                font-size: Theme.heading;
+                color: Theme.muted;
             }
         }
     }
 }
 
-// A label on the left, a control on the right.
-export component Field inherits HorizontalLayout {
+// The quantum: stops at each power of two from 32 to 8192 frames, with the latency.
+export component QuantumControl inherits VerticalLayout {
+    in-out property <float> index;
+    in property <int> rate-hz;
     in property <string> label;
-    in property <string> hint;
-    spacing: Theme.pad;
-    VerticalLayout {
-        width: 150px;
-        alignment: start;
-        spacing: 2px;
-        padding-top: 6px;
-        Text {
-            text: root.label;
-            font-size: Theme.body;
-            font-weight: 600;
-            color: Palette.foreground;
-            wrap: word-wrap;
+    callback picked(string);
+    property <int> stops: 9;
+    property <int> frames: Math.round(Math.pow(2, Math.round(root.index)));
+    property <string> ms: root.rate-hz > 0 ? (Math.round(root.frames * 10000 / root.rate-hz) / 10) + " ms" : "";
+    property <float> pos: (Math.round(root.index) - 5) / (root.stops - 1);
+    spacing: 14px;
+
+    function set-from(x: length, w: length) {
+        root.index = max(0, min(root.stops - 1, Math.round(x / w * (root.stops - 1)))) + 5;
+    }
+    function nudge(by: int) {
+        root.index = max(5, min(13, Math.round(root.index) + by));
+        root.picked("" + root.frames);
+    }
+
+    HorizontalLayout {
+        spacing: 24px;
+        VerticalLayout {
+            alignment: end;
+            spacing: 0px;
+            HorizontalLayout {
+                spacing: 6px;
+                alignment: start;
+                Text {
+                    text: root.frames;
+                    font-size: 28px;
+                    font-weight: 600;
+                    letter-spacing: -0.5px;
+                    color: Theme.ink;
+                }
+                VerticalLayout {
+                    alignment: end;
+                    padding-bottom: 5px;
+                    Text {
+                        text: "frames";
+                        font-size: Theme.body;
+                        color: Theme.muted;
+                    }
+                }
+            }
         }
-        if root.hint != "": Text {
-            text: root.hint;
-            font-size: Theme.small;
-            color: Theme.muted;
-            wrap: word-wrap;
+        if root.ms != "": VerticalLayout {
+            alignment: end;
+            padding-bottom: 5px;
+            Text {
+                text: root.ms + " per cycle";
+                font-size: Theme.body;
+                color: Theme.muted;
+            }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        VerticalLayout {
+            alignment: end;
+            Button {
+                text: "Use default";
+                kind: "ghost";
+                clicked => { root.picked("default"); }
+            }
         }
     }
-    VerticalLayout {
-        horizontal-stretch: 1;
-        alignment: start;
-        @children
+    track := Rectangle {
+        height: 38px;
+        accessible-role: slider;
+        accessible-label: "Buffer size";
+        accessible-value: root.frames + " frames";
+        property <length> inset: 9px;
+        property <length> span: self.width - 2 * self.inset;
+        // Rail and filled part.
+        Rectangle {
+            x: track.inset;
+            y: 8px;
+            width: track.span;
+            height: 4px;
+            border-radius: 2px;
+            background: Theme.line;
+        }
+        Rectangle {
+            x: track.inset;
+            y: 8px;
+            width: track.span * root.pos;
+            height: 4px;
+            border-radius: 2px;
+            background: Theme.ink;
+        }
+        for i in root.stops: Rectangle {
+            x: track.inset + track.span * i / (root.stops - 1) - 20px;
+            y: 22px;
+            width: 40px;
+            height: 16px;
+            Text {
+                text: Math.round(Math.pow(2, i + 5));
+                font-size: Theme.micro;
+                color: i == Math.round(root.index) - 5 ? Theme.ink : Theme.faint;
+                font-weight: i == Math.round(root.index) - 5 ? 600 : 400;
+                horizontal-alignment: center;
+            }
+        }
+        for i in root.stops: Rectangle {
+            x: track.inset + track.span * i / (root.stops - 1) - 1px;
+            y: 15px;
+            width: 2px;
+            height: 4px;
+            background: Theme.line-strong;
+        }
+        thumb := Rectangle {
+            x: track.inset + track.span * root.pos - 9px;
+            y: 1px;
+            width: 18px;
+            height: 18px;
+            border-radius: 9px;
+            background: Theme.surface;
+            border-width: 2px;
+            border-color: Theme.ink;
+            drop-shadow-blur: 3px;
+            drop-shadow-offset-y: 1px;
+            drop-shadow-color: #00000030;
+            animate x { duration: 80ms; }
+            FocusRing { width: parent.width + 6px; height: parent.height + 6px; show: focus.has-focus; corner: 9px; }
+        }
+        focus := FocusScope {
+            key-pressed(e) => {
+                if (e.text == Key.LeftArrow || e.text == Key.DownArrow) {
+                    root.nudge(-1);
+                    return accept;
+                }
+                if (e.text == Key.RightArrow || e.text == Key.UpArrow) {
+                    root.nudge(1);
+                    return accept;
+                }
+                return reject;
+            }
+            TouchArea {
+                mouse-cursor: pointer;
+                pointer-event(e) => {
+                    if (e.kind == PointerEventKind.down) {
+                        focus.focus();
+                        root.set-from(self.mouse-x - track.inset, track.span);
+                    }
+                    if (e.kind == PointerEventKind.up) {
+                        root.picked("" + root.frames);
+                    }
+                }
+                moved => {
+                    if (self.pressed) {
+                        root.set-from(self.mouse-x - track.inset, track.span);
+                    }
+                }
+            }
+        }
+    }
+    if root.label != "": Why {
+        text: "Lower means less latency but more risk of crackles. " + root.label;
+    }
+}
+
+// Tabs drawn as text with an underline under the current one.
+export component TabBar inherits HorizontalLayout {
+    in property <[string]> tabs;
+    in-out property <int> current;
+    spacing: 24px;
+    alignment: start;
+    for t[i] in root.tabs: Rectangle {
+        accessible-role: tab;
+        accessible-label: t;
+        accessible-action-default => { root.current = i; }
+        width: tl.preferred-width;
+        height: 40px;
+        tl := Text {
+            y: 10px;
+            text: t;
+            font-size: Theme.body;
+            font-weight: 600;
+            color: i == root.current || tta.has-hover ? Theme.ink : Theme.muted;
+        }
+        Rectangle {
+            y: parent.height - 2px;
+            height: 2px;
+            border-radius: 1px;
+            background: i == root.current ? Theme.ink : transparent;
+        }
+        FocusRing { width: parent.width + 6px; height: parent.height + 6px; show: tf.has-focus; corner: 4px; }
+        tf := FocusScope {
+            key-pressed(e) => {
+                if (e.text == Key.Return || e.text == " ") {
+                    root.current = i;
+                    return accept;
+                }
+                if (e.text == Key.RightArrow) {
+                    root.current = Math.min(root.current + 1, root.tabs.length - 1);
+                    return accept;
+                }
+                if (e.text == Key.LeftArrow) {
+                    root.current = Math.max(root.current - 1, 0);
+                    return accept;
+                }
+                return reject;
+            }
+            tta := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.current = i; }
+            }
+        }
     }
 }

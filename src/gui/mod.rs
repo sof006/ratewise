@@ -190,6 +190,13 @@ pub fn run(opts: Options) -> anyhow::Result<()> {
     if let Ok(theme) = std::env::var("RATEWISE_THEME") {
         w.invoke_set_theme(theme.into());
     }
+    // RATEWISE_SIZE=960x620 shoots at another window size, e.g. the minimum.
+    if let Some((width, height)) = std::env::var("RATEWISE_SIZE").ok().and_then(|s| {
+        let (w, h) = s.split_once('x')?;
+        Some((w.parse::<f32>().ok()?, h.parse::<f32>().ok()?))
+    }) {
+        w.window().set_size(slint::LogicalSize::new(width, height));
+    }
     if let Some(mono) = monospace_family() {
         w.global::<Theme>().set_mono(mono.into());
     }
@@ -658,6 +665,7 @@ fn review_for(
                     })
                     .unwrap_or_default()
                     .into(),
+                lines: Default::default(),
                 confirm_label: match (kind, mode) {
                     (ReviewKind::Revert, _) => "Revert",
                     (ReviewKind::Reset, _) => "Remove them",
@@ -699,11 +707,14 @@ struct Frame {
 }
 
 fn build(st: &mut State) -> Frame {
-    let review = st
+    let mut review = st
         .review
         .as_ref()
         .map(|r| r.view.clone())
         .unwrap_or_default();
+    if review.open {
+        review.lines = view::model(view::review_lines(&review.body, review.state == "plan"));
+    }
     let Some(inputs) = &st.inputs else {
         return Frame {
             nav: Vec::new(),

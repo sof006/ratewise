@@ -4,12 +4,12 @@
 use slint::{ModelRc, SharedString, VecModel};
 
 use super::edits::Edits;
-use super::{Chip, ChipRow, ClockView, DeviceView, Fact, KV, NavItem, Opt};
+use super::{Chip, ChipRow, ClockView, DeviceView, Fact, KV, Line, NavItem, Opt, Stat};
 use crate::app::Inputs;
 use crate::core::bluetooth;
 use crate::core::model::{
     Bluetooth, BluetoothMode, Device, DeviceKind, Direction, KernelProbeStatus, Running,
-    STANDARD_RATES, SampleFormat, SoundServer, codec_label, khz,
+    SampleFormat, SoundServer, codec_label, khz,
 };
 use crate::core::plan::{self, PlanContext};
 use crate::core::settings::{Change, DeviceSaved, LdacQuality, Value, rate_list};
@@ -17,6 +17,12 @@ use crate::core::settings::{Change, DeviceSaved, LdacQuality, Value, rate_list};
 /// Rates offered in selectors. Higher ones appear only for devices that can use them.
 const COMMON_RATES: [u32; 10] = [
     44_100, 48_000, 88_200, 96_000, 176_400, 192_000, 352_800, 384_000, 705_600, 768_000,
+];
+/// The rate grid on the overview: each row is a family, each column a multiple.
+const RATE_GRID: [(&str, [u32; 5]); 3] = [
+    ("44.1 kHz", [44_100, 88_200, 176_400, 352_800, 705_600]),
+    ("48 kHz", [48_000, 96_000, 192_000, 384_000, 768_000]),
+    ("Lower", [8_000, 11_025, 16_000, 22_050, 32_000]),
 ];
 const FORMATS: [(SampleFormat, &str); 5] = [
     (SampleFormat::S16Le, "16-bit"),
@@ -115,6 +121,18 @@ fn is_default(d: &Device) -> bool {
     d.pipewire.as_ref().is_some_and(|p| p.is_default)
 }
 
+/// The sidebar and header icon for a device.
+fn kind_icon(d: &Device) -> &'static str {
+    match d.kind {
+        DeviceKind::Bluetooth => "bluetooth",
+        _ if d.direction == Direction::Capture => "mic",
+        DeviceKind::Usb => "usb",
+        DeviceKind::Hdmi => "hdmi",
+        DeviceKind::BuiltIn => "builtin",
+        DeviceKind::Unknown => "unknown",
+    }
+}
+
 pub fn nav(inputs: &Inputs) -> Vec<NavItem> {
     let mut out = Vec::new();
     let header = |title: &str| NavItem {
@@ -136,10 +154,12 @@ pub fn nav(inputs: &Inputs) -> Vec<NavItem> {
             kind: s("device"),
             key: s(format!("device:{}", d.id)),
             title: s(&d.description),
+            // The icon shows the kind, so the second line is what it's doing.
             badge: s(match running.as_str() {
-                "" => d.kind.label().to_string(),
-                r => format!("{} · {r}", d.kind.label()),
+                "" => capitalise(d.kind.label()),
+                r => capitalise(r),
             }),
+            icon: s(kind_icon(d)),
             tag: s(if is_default(d) { "Default" } else { "" }),
             is_default: is_default(d),
             active: is_active(d),
@@ -163,14 +183,15 @@ pub fn nav(inputs: &Inputs) -> Vec<NavItem> {
         out.extend(inputs_.into_iter().map(device));
     }
     out.push(header("SYSTEM"));
-    for (key, title) in [
-        ("global", "Global settings"),
-        ("doctor", "About this system"),
+    for (key, title, icon) in [
+        ("global", "Global settings", "sliders"),
+        ("doctor", "About this system", "pulse"),
     ] {
         out.push(NavItem {
             kind: s("page"),
             key: s(key),
             title: s(title),
+            icon: s(icon),
             ..Default::default()
         });
     }
@@ -210,6 +231,54 @@ pub fn device_view(c: &Ctx, d: &Device) -> DeviceView {
             ),
         },
         None => ("Unknown".into(), "Ratewise couldn't read its state.".into(), String::new()),
+    };
+
+    // The big numbers on the overview, and the details under them.
+    let mut readout = Vec::new();
+    let mut readout_detail = Vec::new();
+    let state = match d.running.as_ref().map(|r| &r.value) {
+        Some(Running::Active(p)) => {
+            let stat = |label: &str, value: String, unit: &str| Stat {
+                label: s(label),
+                value: s(value),
+                unit: s(unit),
+            };
+            readout.push(stat("RATE", khz(p.rate), "kHz"));
+            if let Some(f) = &p.format {
+                match f.bits() {
+                    Some(b) => readout.push(stat(
+                        "DEPTH",
+                        b.to_string(),
+                        if f.is_float() { "bit float" } else { "bit" },
+                    )),
+                    None => readout.push(stat("FORMAT", f.alsa_name().to_string(), "")),
+                }
+            }
+            if let Some(ch) = p.channels {
+                readout.push(stat("CHANNELS", ch.to_string(), ""));
+            }
+            let detail = |key: &str, value: String| KV {
+                key: s(key),
+                value: s(value),
+                source: SharedString::new(),
+            };
+            if let Some(f) = &p.format {
+                readout_detail.push(detail("Format", f.alsa_name().to_string()));
+            }
+            if let (Some(n), Some(ms)) = (p.period_frames, p.period_ms()) {
+                readout_detail.push(detail("Period", format!("{n} frames · {ms:.1} ms")));
+            }
+            if let (Some(n), Some(ms)) = (p.buffer_frames, p.buffer_ms()) {
+                readout_detail.push(detail("Buffer", format!("{n} frames · {ms:.1} ms")));
+            }
+            "playing"
+        }
+        Some(Running::Idle) => "idle",
+        None => "unknown",
+    };
+    let current_rate = match d.running.as_ref().map(|r| &r.value) {
+        Some(Running::Active(p)) => Some(p.rate),
+        _ => None,
     };
 
     // Configured.
@@ -341,25 +410,32 @@ pub fn device_view(c: &Ctx, d: &Device) -> DeviceView {
     }
     let src = |source: crate::core::model::Source| s(source.label());
     let mut rate_rows = Vec::new();
+    let mut rate_source = String::new();
     match &caps.rates {
         Some(r) if !r.value.is_unbounded() => {
-            let chips: Vec<Chip> = STANDARD_RATES
-                .iter()
-                .map(|&rate| Chip {
-                    label: s(khz(rate)),
-                    on: r.value.contains(rate),
-                })
-                .collect();
-            for half in chips.chunks(8) {
+            // The two families in octaves, so a column is one multiple; low rates last,
+            // and only when the device has any.
+            let chips = |rates: &[u32]| -> Vec<Chip> {
+                rates
+                    .iter()
+                    .map(|&rate| Chip {
+                        label: s(khz(rate)),
+                        on: r.value.contains(rate),
+                        current: current_rate == Some(rate),
+                    })
+                    .collect()
+            };
+            for (label, rates) in RATE_GRID {
+                let row = chips(&rates);
+                if label == "Lower" && !row.iter().any(|c| c.on || c.current) {
+                    continue;
+                }
                 rate_rows.push(ChipRow {
-                    chips: model(half.to_vec()),
+                    label: s(label),
+                    chips: model(row),
                 });
             }
-            supports.push(KV {
-                key: s("Rates"),
-                value: s("kHz, highlighted if supported"),
-                source: src(r.source),
-            });
+            rate_source = r.source.label().to_string();
         }
         Some(r) => supports.push(KV {
             key: s("Rates"),
@@ -637,6 +713,11 @@ pub fn device_view(c: &Ctx, d: &Device) -> DeviceView {
         configured: model(configured),
         supports: model(supports),
         rate_rows: model(rate_rows),
+        rate_source: s(rate_source),
+        icon: s(kind_icon(d)),
+        state: s(state),
+        readout: model(readout),
+        readout_detail: model(readout_detail),
         facts: model(facts),
         edit_why: s(edit_why),
         rate_opts: model(rate_opts),
@@ -1346,6 +1427,67 @@ pub fn banner(c: &Ctx, fixture: Option<&std::path::Path>, errors: &[String]) -> 
     out
 }
 
+// ---- review sheet ------------------------------------------------------------------
+
+/// Splits a plan, as `render_plan_window` writes it, into lines the sheet can style:
+/// headings, numbered steps, their reasons, diff lines and notes. Anything else (a
+/// refusal, an error) is plain text.
+pub fn review_lines(body: &str, plan: bool) -> Vec<Line> {
+    let line = |kind: &str, text: &str| Line {
+        kind: s(kind),
+        text: s(text),
+    };
+    if !plan {
+        return body
+            .split('\n')
+            .map(|l| line(if l.is_empty() { "gap" } else { "text" }, l))
+            .collect();
+    }
+    let mut out: Vec<Line> = Vec::new();
+    for l in body.lines() {
+        let kind = if l.trim().is_empty() {
+            "gap"
+        } else if let Some(rest) = l.strip_prefix("       ") {
+            if rest.starts_with("@@") {
+                "hunk"
+            } else if rest.starts_with('+') {
+                "add"
+            } else if rest.starts_with('-') {
+                "del"
+            } else {
+                "ctx"
+            }
+        } else if l.starts_with("     ") {
+            "why"
+        } else if l.starts_with("  - ") {
+            "note"
+        } else if l
+            .strip_prefix("  ")
+            .and_then(|r| r.split_once(". "))
+            .is_some_and(|(n, _)| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+        {
+            "step"
+        } else if !l.contains(' ') {
+            // "Steps", "Notes", "Afterwards".
+            "head"
+        } else {
+            "text"
+        };
+        // Leading blank lines add nothing; the sheet has its own padding.
+        if kind == "gap" && out.is_empty() {
+            continue;
+        }
+        let text = match kind {
+            "add" | "del" | "ctx" | "hunk" => &l[7..],
+            "note" => l.trim_start().trim_start_matches("- "),
+            "head" | "gap" => l,
+            _ => l.trim_start(),
+        };
+        out.push(line(kind, text));
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1379,6 +1521,40 @@ mod tests {
     }
 
     #[test]
+    fn review_lines_follow_the_plan_layout() {
+        let body = "\nSteps\n  1. Update ~/.config/a.conf\n     Sets the rate.\n       @@ -1,2 +1,2 @@\n        keep\n       -old\n       +new\n\nNotes\n  - It applies to every device.\n\nAfterwards\n  Restart PipeWire.\n\nRatewise backs up every file first.\n";
+        let got: Vec<(String, String)> = review_lines(body, true)
+            .into_iter()
+            .map(|l| (l.kind.to_string(), l.text.to_string()))
+            .collect();
+        let want = [
+            ("head", "Steps"),
+            ("step", "1. Update ~/.config/a.conf"),
+            ("why", "Sets the rate."),
+            ("hunk", "@@ -1,2 +1,2 @@"),
+            ("ctx", " keep"),
+            ("del", "-old"),
+            ("add", "+new"),
+            ("gap", ""),
+            ("head", "Notes"),
+            ("note", "It applies to every device."),
+            ("gap", ""),
+            ("head", "Afterwards"),
+            ("text", "Restart PipeWire."),
+            ("gap", ""),
+            ("text", "Ratewise backs up every file first."),
+        ];
+        let want: Vec<(String, String)> = want
+            .iter()
+            .map(|(k, t)| (k.to_string(), t.to_string()))
+            .collect();
+        assert_eq!(got, want);
+        let refused = review_lines("No.\n\nTry again.", false);
+        assert_eq!(refused.len(), 3);
+        assert!(refused.iter().all(|l| l.kind == "text" || l.kind == "gap"));
+    }
+
+    #[test]
     fn sidebar_groups_outputs_inputs_and_pages() {
         let i = inputs("pw-1.2-desktop");
         let nav = nav(&i);
@@ -1393,7 +1569,8 @@ mod tests {
             .iter()
             .find(|n| n.title == "D50s Analog Stereo")
             .unwrap();
-        assert_eq!(d50.badge, "USB · 96 kHz · 32-bit");
+        assert_eq!(d50.badge, "96 kHz · 32-bit");
+        assert_eq!(d50.icon, "usb");
         assert_eq!(d50.tag, "Default");
         assert!(d50.active);
     }
@@ -1435,6 +1612,19 @@ mod tests {
             .tip;
         assert!(tip.contains("doesn't support S16_LE"), "{tip}");
         assert_eq!(v.running_main, "96 kHz · 32-bit");
+        assert_eq!(v.state, "playing");
+        let stats: Vec<String> = v
+            .readout
+            .iter()
+            .map(|s| format!("{} {}", s.value, s.unit))
+            .collect();
+        assert_eq!(stats[..2], ["96 kHz", "32 bit"]);
+        // The grid marks the running rate in the 48 kHz row's ×2 column.
+        let row = v.rate_rows.row_data(1).unwrap();
+        assert_eq!(row.label, "48 kHz");
+        let chip = row.chips.row_data(1).unwrap();
+        assert!(chip.on && chip.current, "{}", chip.label);
+        assert!(!v.rate_source.is_empty());
 
         let bt = i
             .snapshot

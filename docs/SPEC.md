@@ -140,20 +140,20 @@ Grey out any value the device can't do, with a tooltip explaining why.
 The toolkit is **Slint**, using its own renderer.
 
 ### Layout
-- **Left sidebar:** device list grouped as Outputs / Inputs. Each entry shows an icon (USB / built-in / HDMI / Bluetooth), the name, and a small badge with the running rate ("48 kHz · 24-bit", or "idle"). The bottom of the sidebar shows the sound-server status pill (e.g. "PipeWire 1.2 · WirePlumber 0.5").
+- **Left sidebar:** device list grouped as Outputs / Inputs. Each entry shows an icon (USB / built-in / HDMI / Bluetooth / microphone), the name, and a second line with the running rate ("48 kHz · 24-bit", in the signal colour while playing, or "Idle"). The bottom of the sidebar shows the sound-server status (e.g. "PipeWire 1.2 · WirePlumber 0.5") next to the refresh and theme buttons.
 - **Main panel, per device:**
-  - **Overview:** a large "Running now" readout (rate / format / buffer / latency) next to the "Configured" values, plus a capability summary as chips (supported rates highlighted on a full standard-rate strip).
+  - **Overview:** a large "Playing now" readout (rate / depth / channels, then format / period / buffer with latency), a grid of the standard rates (the 44.1 and 48 kHz families in rows, multiples in columns, low rates only when supported) with supported ones filled and the running one marked, and the "Configured" values beside a capability summary.
   - **Sample rate & format:** segmented selectors containing only valid options. Bluetooth devices get a **Bluetooth** tab here instead: mode, codec (only ones both sides support), LDAC quality when offered, and headset auto-switch.
   - **Buffer & latency:** a quantum slider with live ms readout and plain-English hints ("lower = less latency, more risk of crackles").
   - **Advanced:** period size, headroom, suspend, resampler, raw properties table (copyable).
 - **Global settings** page for clock/allowed rates/quantum.
-- **Bottom action bar:** `Apply live` · `Save permanently` · `Revert`, with a "Review changes" sheet showing the plan and file diffs.
+- **Bottom action bar:** `Revert last change` when nothing is pending; `Discard` · `Apply live` · `Save permanently` when something is. Both open a review sheet showing the plan, with file diffs coloured by line.
 - **About this system / Doctor** page showing stack, versions, tools found, and which renderer is in use.
 
 ### Feel
 - Follow the system light/dark theme where it can be detected, and offer a manual toggle.
 - Use an embedded UI font (Inter or Noto Sans, OFL) so text looks identical everywhere and doesn't depend on fontconfig. Ratewise embeds Inter 4.1's static Regular, SemiBold and Bold from `assets/fonts/` (licence alongside; ship it in the AppImage too). Monospace text (the doctor report, diffs) uses the system's monospace font, found with `fc-match`.
-- Keep it consistent: 8 px spacing grid, one accent colour, no clutter. Empty and error states need real wording, e.g. "No sound devices found. This usually means you don't have access to /dev/snd. Are you in the `audio` group, or running inside a container?"
+- Keep it consistent: 8 px spacing grid, warm neutral surfaces with ink (not a brand colour) marking what's selected, and colour only where it means something (playing, warnings, errors, diffs). Every control is drawn by Ratewise, not taken from a system style, so it looks the same everywhere. No clutter. Empty and error states need real wording, e.g. "No sound devices found. This usually means you don't have access to /dev/snd. Are you in the `audio` group, or running inside a container?"
 - It must be fully keyboard-navigable, and must stay usable at 1280×720 and on HiDPI.
 
 ### Behaviour
@@ -224,7 +224,7 @@ Device selectors accept the stable name, the ALSA `hw:CARD=…` id, or a fuzzy d
 
 Without `--live` or `--save`, `set` changes things live when it can and otherwise explains that `--save` is needed. Values accept friendly spellings (`96k`, `44.1kHz`, `default`; `off` for force values and suspend). `--restart` restarts the affected services after a save, and asks for nothing first, so the GUI must confirm. Hidden flags for development: `--fixture <dir>` reads a captured system, and `--sandbox <dir>` sends every write into `<dir>/home` and only records commands; `--fixture` refuses to write without `--sandbox`. The window takes the same two flags; with `--fixture` alone it shows the captured system read-only.
 
-Environment variables: `RATEWISE_LOG=debug` for verbose logs, `RATEWISE_RENDERER=software` to skip OpenGL, `RATEWISE_THEME=light|dark` to override the system theme. For design review, the hidden `--screenshot <png>` renders the window to a file and exits; `RATEWISE_PAGE` picks the page (`device:<id>`, `global`, `doctor`, `review:<setting>=<value>`, or `apply:<setting>=<value>`, which also confirms it, so use `--sandbox`), and `RATEWISE_TAB=0..3` picks the device tab.
+Environment variables: `RATEWISE_LOG=debug` for verbose logs, `RATEWISE_RENDERER=software` to skip OpenGL, `RATEWISE_THEME=light|dark` to override the system theme. For design review, the hidden `--screenshot <png>` renders the window to a file and exits; `RATEWISE_PAGE` picks the page (`device:<id>`, `global`, `doctor`, `review:<setting>=<value>`, or `apply:<setting>=<value>`, which also confirms it, so use `--sandbox`), `RATEWISE_TAB=0..3` picks the device tab, and `RATEWISE_SIZE=960x620` sets the window size.
 
 ---
 
