@@ -1,0 +1,6 @@
+ 0 [PCH            ]: HDA-Intel - HDA Intel PCH
+                      HDA Intel PCH at 0xf7f10000 irq 32
+ 1 [NVidia         ]: HDA-Intel - HDA NVidia
+                      HDA NVidia at 0xf7080000 irq 17
+ 2 [D50s           ]: USB-Audio - D50s
+                      Topping D50s at usb-0000:00:14.0-3, high speed

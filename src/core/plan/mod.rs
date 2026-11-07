@@ -17,7 +17,9 @@ use crate::core::model::{
     SoundServer, WirePlumberConfig, khz,
 };
 use crate::core::paths::Paths;
-use crate::core::settings::{Change, LdacQuality, Mode, SavedConfig, Value, rate_list};
+use crate::core::settings::{
+    Change, LdacQuality, LeAudioLatency, Mode, SavedConfig, Value, rate_list,
+};
 pub use verify::{Check, ClockKey, ClockValue, Expect, Outcome, render_checks, verify};
 
 /// A program to run, with its arguments.
@@ -381,6 +383,14 @@ fn support(
                 bluetooth_device(ctx, device).and_then(|()| wireplumber_config(ctx).map(|_| ())),
             );
         }
+        Change::LeAudioLatency(_) => {
+            return (
+                Err("WirePlumber applies it when the headset connects".to_string()),
+                bluetooth_device(ctx, device)
+                    .and_then(|()| le_audio_support(ctx))
+                    .and_then(|()| wireplumber_config(ctx).map(|_| ())),
+            );
+        }
         _ => {}
     }
     let live = match server {
@@ -511,6 +521,23 @@ fn autoswitch_support(ctx: &PlanContext) -> (Result<(), String>, Result<(), Stri
         Err(e) => Err(e.clone()),
     };
     (live, config.map(|_| ()))
+}
+
+/// The LE Audio latency is `bluez5.bap.force-target-latency`, new in PipeWire 1.6.
+fn le_audio_support(ctx: &PlanContext) -> Result<(), String> {
+    let version = ctx
+        .snapshot
+        .stack
+        .pipewire_version
+        .as_deref()
+        .or(ctx.snapshot.pipewire_version.as_deref());
+    match version.and_then(crate::core::stack::parse_version) {
+        Some(v) if v < (1, 6, 0) => Err(format!(
+            "Choosing the LE Audio latency needs PipeWire 1.6 or newer, and this is PipeWire {}.",
+            version.unwrap_or_default()
+        )),
+        _ => Ok(()),
+    }
 }
 
 /// Whether `device` is a Bluetooth device Ratewise can configure through PipeWire.
@@ -940,6 +967,35 @@ fn validate(
                         .into(),
                 );
             }
+        }
+        Change::LeAudioLatency(v) => {
+            let Some((d, bt)) = device.and_then(|d| Some((d, d.bluetooth.as_ref()?))) else {
+                return Ok(notes);
+            };
+            if !bluetooth::is_le_audio(bt) && v.as_option().is_some() {
+                return refuse(format!(
+                    "{} doesn't offer LE Audio, so there's no LE Audio latency to set.",
+                    d.description
+                ));
+            }
+            match v {
+                Value::Set(LeAudioLatency::Low) => notes.push(
+                    "Low latency suits games and video, but sound drops out more easily when \
+                     the connection is weak."
+                        .into(),
+                ),
+                Value::Set(LeAudioLatency::Reliable) => notes.push(
+                    "High reliability drops out less, but adds delay: fine for music, noticeable \
+                     in games and video."
+                        .into(),
+                ),
+                Value::Default => {}
+            }
+            notes.push(
+                "It applies only while the device uses LE Audio (LC3). PipeWire marks this \
+                 setting as experimental."
+                    .into(),
+            );
         }
         Change::HeadsetAutoswitch(Value::Set(false)) => notes.push(
             "For calls, switch the headset to headset mode yourself: its microphone is off \
@@ -1428,15 +1484,22 @@ fn plan_save(ctx: &PlanContext, items: &[(Change, Option<&Device>)]) -> Result<P
                 .into(),
         );
     }
-    if items
+    let ldac = items
         .iter()
-        .any(|(c, _)| matches!(c, Change::LdacQuality(_)))
-    {
-        plan.afterwards = Some(
-            "WirePlumber applies the LDAC quality when the headset connects, so after the restart \
-             turn the headset off and on again."
-                .into(),
-        );
+        .any(|(c, _)| matches!(c, Change::LdacQuality(_)));
+    let le_audio = items
+        .iter()
+        .any(|(c, _)| matches!(c, Change::LeAudioLatency(_)));
+    if ldac || le_audio {
+        let what = match (ldac, le_audio) {
+            (true, true) => "the LDAC quality and LE Audio latency",
+            (true, false) => "the LDAC quality",
+            _ => "the LE Audio latency",
+        };
+        plan.afterwards = Some(format!(
+            "WirePlumber applies {what} when the headset connects, so after the restart turn \
+             the headset off and on again."
+        ));
     }
     if items
         .iter()

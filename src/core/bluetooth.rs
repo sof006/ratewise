@@ -33,6 +33,13 @@ pub fn profile_codec(name: &str, description: &str) -> Option<String> {
     })
 }
 
+/// Whether the device offers LE Audio (BAP, with the LC3 codec) as well as, or instead
+/// of, classic Bluetooth audio.
+pub fn is_le_audio(bt: &Bluetooth) -> bool {
+    bt.profiles.iter().any(|p| p.name.starts_with("bap-"))
+        || bt.profile.as_deref().is_some_and(|p| p.starts_with("bap-"))
+}
+
 /// "High quality (LDAC)", "Headset (mSBC)", "High quality (codec picked automatically)", "Off".
 pub fn profile_label(p: &BluetoothProfile) -> String {
     match (p.mode(), p.codec()) {

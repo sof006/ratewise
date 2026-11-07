@@ -127,6 +127,9 @@ fn bluez_props(b: &BluetoothSaved) -> Props {
     if let Some(q) = b.ldac_quality {
         p.push(("bluez5.a2dp.ldac.quality", quote(q.key())));
     }
+    if let Some(l) = b.le_audio_latency {
+        p.push(("bluez5.bap.force-target-latency", quote(l.key())));
+    }
     p
 }
 

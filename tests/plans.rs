@@ -14,7 +14,7 @@ use ratewise::core::plan::{
     render_plan,
 };
 use ratewise::core::select::select;
-use ratewise::core::settings::{Change, LdacQuality, Mode, SavedConfig, Value};
+use ratewise::core::settings::{Change, LdacQuality, LeAudioLatency, Mode, SavedConfig, Value};
 use ratewise::probe::Probes;
 
 const SYSTEM_PULSE: &str =
@@ -940,6 +940,73 @@ fn bluetooth_settings_saved_for_wireplumber_0_5() {
     w.apply(&reset);
     assert!(w.saved.is_empty());
     assert!(w.files.values().all(|f| *f == FileState::Missing));
+}
+
+#[test]
+fn le_audio_latency_saved_for_pipewire_1_6() {
+    let mut w = World::new("pw-1.6-le-audio");
+    let low = Change::LeAudioLatency(Value::Set(LeAudioLatency::Low));
+    let text = w.run(&[(low.clone(), Some(HEADPHONES), save())]);
+    assert_golden("plan/pw-1.6-le-audio-bluetooth.txt", &text);
+    w.dump_files("pw-1.6-le-audio-bluetooth");
+    let conf = w.file(&w.paths.wireplumber_05()).unwrap();
+    assert!(
+        conf.contains(r#"bluez5.bap.force-target-latency = "low-latency""#),
+        "{conf}"
+    );
+
+    for (result, want) in [
+        (
+            w.plan(low.clone(), Some(HEADPHONES), Some(Mode::Live)),
+            "--save",
+        ),
+        (
+            w.plan(low.clone(), Some(SPEAKER), save()),
+            "doesn't offer LE Audio",
+        ),
+        (
+            w.plan(low.clone(), Some(D50S), save()),
+            "isn't a Bluetooth device",
+        ),
+    ] {
+        let e = result.unwrap_err();
+        assert!(e.contains(want), "{e}");
+    }
+
+    // Switching to reliable rewrites the rule; balanced removes it.
+    let p = w
+        .plan(
+            Change::LeAudioLatency(Value::Set(LeAudioLatency::Reliable)),
+            Some(HEADPHONES),
+            save(),
+        )
+        .unwrap();
+    w.apply(&p);
+    let conf = w.file(&w.paths.wireplumber_05()).unwrap();
+    assert!(conf.contains(r#""high-reliability""#), "{conf}");
+    let p = w
+        .plan(
+            Change::LeAudioLatency(Value::Default),
+            Some(HEADPHONES),
+            save(),
+        )
+        .unwrap();
+    w.apply(&p);
+    assert!(w.saved.is_empty());
+    assert!(w.files.values().all(|f| *f == FileState::Missing));
+}
+
+#[test]
+fn le_audio_latency_needs_pipewire_1_6() {
+    let w = World::new("pw-1.2-desktop");
+    let e = w
+        .plan(
+            Change::LeAudioLatency(Value::Set(LeAudioLatency::Low)),
+            Some(HEADPHONES),
+            save(),
+        )
+        .unwrap_err();
+    assert!(e.contains("PipeWire 1.6 or newer"), "{e}");
 }
 
 #[test]

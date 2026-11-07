@@ -4,7 +4,7 @@
 //! one plan. Picking a value that matches what's already in effect drops the edit.
 
 use crate::core::model::{ClockSettings, Device, SampleFormat};
-use crate::core::settings::{Change, LdacQuality, SavedConfig, Value};
+use crate::core::settings::{Change, LdacQuality, LeAudioLatency, SavedConfig, Value};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Edit {
@@ -131,6 +131,10 @@ pub fn device_change(kind: &str, value: &str) -> Option<Change> {
         "ldac" => Change::LdacQuality(match value {
             "default" => Value::Default,
             v => Value::Set(LdacQuality::parse(v)?),
+        }),
+        "le-latency" => Change::LeAudioLatency(match value {
+            "default" => Value::Default,
+            v => Value::Set(LeAudioLatency::parse(v)?),
         }),
         _ => return None,
     })
@@ -271,6 +275,10 @@ mod tests {
         assert_eq!(
             device_change("ldac", "hq"),
             Some(Change::LdacQuality(Value::Set(LdacQuality::Hq)))
+        );
+        assert_eq!(
+            device_change("le-latency", "low-latency"),
+            Some(Change::LeAudioLatency(Value::Set(LeAudioLatency::Low)))
         );
         assert_eq!(
             global_change("headset-autoswitch", "off", &[]),

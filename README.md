@@ -10,7 +10,7 @@ command line, in one self-contained AppImage.
   suspend and resampler quality, per device or for everything.
 - For Bluetooth headphones and headsets on PipeWire: switch between high quality and
   headset (microphone) mode, pick the codec (LDAC, aptX, AAC, SBC, …), set LDAC's
-  bitrate, and choose whether calls switch the headset automatically.
+  bitrate or LE Audio's latency, and choose whether calls switch the headset automatically.
 - Every change is shown as a plan with file diffs first, is backed up, and can be
   reverted. Ratewise only writes your own config files and never needs root.
 

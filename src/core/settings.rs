@@ -63,6 +63,49 @@ pub enum Change {
     HeadsetAutoswitch(Value<bool>),
     /// LDAC's bitrate on one Bluetooth device.
     LdacQuality(Value<LdacQuality>),
+    /// Whether LE Audio (LC3) on one Bluetooth device favours low latency or a reliable
+    /// connection. `Default` is PipeWire's balanced choice.
+    LeAudioLatency(Value<LeAudioLatency>),
+}
+
+/// `bluez5.bap.force-target-latency`: which of the LE Audio (BAP) QoS tables PipeWire
+/// picks link settings from. Unset, it uses both ("balanced"), and since 1.6 prefers the
+/// high-reliability ones at 44.1 and 48 kHz.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LeAudioLatency {
+    /// BAP's low-latency settings: about 10-30 ms on the link, fewer retries.
+    Low,
+    /// BAP's high-reliability settings: about 75-100 ms on the link, more retries.
+    Reliable,
+}
+
+impl LeAudioLatency {
+    pub const ALL: [LeAudioLatency; 2] = [Self::Low, Self::Reliable];
+
+    /// The value PipeWire takes.
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Low => "low-latency",
+            Self::Reliable => "high-reliability",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Low => "low latency",
+            Self::Reliable => "high reliability",
+        }
+    }
+
+    /// `low`, `low-latency`, `gaming`, `reliable`, ...
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s.trim().to_ascii_lowercase().as_str() {
+            "low" | "low-latency" | "latency" | "fast" | "game" | "gaming" => Self::Low,
+            "reliable" | "high-reliability" | "reliability" | "stable" => Self::Reliable,
+            _ => return None,
+        })
+    }
 }
 
 /// `bluez5.a2dp.ldac.quality`.
@@ -141,6 +184,7 @@ impl Change {
             Self::BluetoothProfile(_) => "profile",
             Self::HeadsetAutoswitch(_) => "headset-autoswitch",
             Self::LdacQuality(_) => "ldac-quality",
+            Self::LeAudioLatency(_) => "le-audio-latency",
         }
     }
 
@@ -153,6 +197,7 @@ impl Change {
                 | Self::Suspend(_)
                 | Self::BluetoothProfile(_)
                 | Self::LdacQuality(_)
+                | Self::LeAudioLatency(_)
         )
     }
 
@@ -252,6 +297,10 @@ impl Change {
                 of("the LDAC quality"),
                 v.as_option().map(|q| q.label().to_string()),
             ),
+            Self::LeAudioLatency(v) => to(
+                of("the LE Audio latency"),
+                Some(v.as_option().map_or("balanced", |l| l.label()).to_string()),
+            ),
         }
     }
 }
@@ -324,11 +373,13 @@ pub struct BluetoothSaved {
     pub description: String,
     #[serde(default)]
     pub ldac_quality: Option<LdacQuality>,
+    #[serde(default)]
+    pub le_audio_latency: Option<LeAudioLatency>,
 }
 
 impl BluetoothSaved {
     pub fn is_empty(&self) -> bool {
-        self.ldac_quality.is_none()
+        self.ldac_quality.is_none() && self.le_audio_latency.is_none()
     }
 }
 
@@ -399,7 +450,7 @@ impl SavedConfig {
             (Change::Format(v), None) => g.format = v.clone().into_option(),
             (Change::ResampleQuality(v), _) => g.resample_quality = v.clone().into_option(),
             (Change::HeadsetAutoswitch(v), _) => g.headset_autoswitch = v.clone().into_option(),
-            (Change::LdacQuality(v), Some(d)) => {
+            (Change::LdacQuality(_) | Change::LeAudioLatency(_), Some(d)) => {
                 if let Some(bt) = &d.bluetooth {
                     let entry = next
                         .bluetooth
@@ -407,9 +458,16 @@ impl SavedConfig {
                         .or_insert_with(|| BluetoothSaved {
                             description: d.description.clone(),
                             ldac_quality: None,
+                            le_audio_latency: None,
                         });
                     entry.description = d.description.clone();
-                    entry.ldac_quality = v.clone().into_option();
+                    match change {
+                        Change::LdacQuality(v) => entry.ldac_quality = v.clone().into_option(),
+                        Change::LeAudioLatency(v) => {
+                            entry.le_audio_latency = v.clone().into_option()
+                        }
+                        _ => {}
+                    }
                     if entry.is_empty() {
                         next.bluetooth.remove(&bt.card_name);
                     }
@@ -443,7 +501,8 @@ impl SavedConfig {
                 Change::PeriodSize(_)
                 | Change::Headroom(_)
                 | Change::Suspend(_)
-                | Change::LdacQuality(_),
+                | Change::LdacQuality(_)
+                | Change::LeAudioLatency(_),
                 None,
             ) => {}
         }

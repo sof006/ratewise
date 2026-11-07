@@ -12,7 +12,7 @@ use crate::core::model::{
     SampleFormat, SoundServer, codec_label, khz,
 };
 use crate::core::plan::{self, PlanContext};
-use crate::core::settings::{Change, DeviceSaved, LdacQuality, Value, rate_list};
+use crate::core::settings::{Change, DeviceSaved, LdacQuality, LeAudioLatency, Value, rate_list};
 
 /// Rates offered in selectors. Higher ones appear only for devices that can use them.
 const COMMON_RATES: [u32; 10] = [
@@ -678,6 +678,10 @@ pub fn device_view(c: &Ctx, d: &Device) -> DeviceView {
         Some(bt) => bluetooth_opts(c, d, bt),
         None => (Vec::new(), Vec::new(), String::new()),
     };
+    let (le_latency_opts, le_latency_why) = match &d.bluetooth {
+        Some(bt) => le_latency_opts(c, d, bt),
+        None => (Vec::new(), String::new()),
+    };
     let (ldac_opts, ldac_why) = match &d.bluetooth {
         Some(bt) => ldac_opts(c, d, bt),
         None => (Vec::new(), String::new()),
@@ -736,6 +740,8 @@ pub fn device_view(c: &Ctx, d: &Device) -> DeviceView {
         bt_why: s(bt_why),
         ldac_opts: model(ldac_opts),
         ldac_why: s(ldac_why),
+        le_latency_opts: model(le_latency_opts),
+        le_latency_why: s(le_latency_why),
         raw: s(raw),
     }
 }
@@ -781,6 +787,53 @@ fn ldac_opts(c: &Ctx, d: &Device, bt: &Bluetooth) -> (Vec<Opt>, String) {
             selected == q.key(),
             checked(&pc, Change::LdacQuality(Value::Set(q)), Some(d)).map(|mut w| {
                 w.insert(0, capitalise_first(q.label()));
+                w
+            }),
+        ));
+    }
+    (opts, String::new())
+}
+
+/// LE Audio latency, for devices that offer LE Audio. Saved only.
+fn le_latency_opts(c: &Ctx, d: &Device, bt: &Bluetooth) -> (Vec<Opt>, String) {
+    if !bluetooth::is_le_audio(bt) {
+        return (Vec::new(), String::new());
+    }
+    let pc = c.plan();
+    let change = |v| Change::LeAudioLatency(v);
+    if let Err(why) = plan::availability(&pc, &change(Value::Default), Some(d)).1 {
+        return (Vec::new(), why);
+    }
+    let selected = match c.edits.find("le-audio-latency", Some(&d.id)) {
+        Some(Change::LeAudioLatency(v)) => v.as_option().map(|l| l.key()),
+        _ => c
+            .inputs
+            .saved
+            .bluetooth
+            .get(&bt.card_name)
+            .and_then(|b| b.le_audio_latency)
+            .map(LeAudioLatency::key),
+    }
+    .unwrap_or("default");
+    let mut opts = vec![opt(
+        "default",
+        "Balanced",
+        selected == "default",
+        Ok(vec![
+            "PipeWire's default: it weighs latency against reliability itself.".into(),
+        ]),
+    )];
+    for l in LeAudioLatency::ALL {
+        let (label, tip) = match l {
+            LeAudioLatency::Low => ("Low latency", "Less delay, for games and video."),
+            LeAudioLatency::Reliable => ("Reliable", "Fewer dropouts, more delay."),
+        };
+        opts.push(opt(
+            l.key(),
+            label,
+            selected == l.key(),
+            checked(&pc, change(Value::Set(l)), Some(d)).map(|mut w| {
+                w.insert(0, tip.to_string());
                 w
             }),
         ));
@@ -1285,6 +1338,9 @@ pub fn clock_view(c: &Ctx) -> ClockView {
         if let Some(q) = b.ldac_quality {
             saved.push(kv(&b.description, format!("LDAC {}", q.label())));
         }
+        if let Some(l) = b.le_audio_latency {
+            saved.push(kv(&b.description, format!("LE Audio {}", l.label())));
+        }
     }
     let can_reset = c.read_only.is_none() && plan::plan_reset(&pc).is_ok_and(|p| !p.is_empty());
 
@@ -1635,6 +1691,58 @@ mod tests {
         let v = device_view(&c, bt);
         assert!(v.edit_why.contains("Bluetooth"), "{}", v.edit_why);
         assert_eq!(v.rate_opts.row_count(), 0);
+        // AAC headphones: no LE Audio, so no latency row at all.
+        assert_eq!(v.le_latency_opts.row_count(), 0);
+        assert_eq!(v.le_latency_why, "");
+    }
+
+    #[test]
+    fn le_audio_devices_offer_a_latency_choice() {
+        let i = inputs("pw-1.6-le-audio");
+        let mut edits = Edits::default();
+        let bt = i
+            .snapshot
+            .devices
+            .iter()
+            .find(|d| d.id == "bluez_output.00_00_00_00_00_01.1")
+            .unwrap();
+        let c = Ctx {
+            inputs: &i,
+            edits: &edits,
+            read_only: None,
+        };
+        let v = device_view(&c, bt);
+        assert_eq!(v.le_latency_why, "");
+        assert_eq!(
+            labels(&v.le_latency_opts),
+            [
+                ("Balanced".into(), true, true),
+                ("Low latency".into(), true, false),
+                ("Reliable".into(), true, false),
+            ]
+        );
+
+        edits.set(
+            super::super::edits::Edit {
+                change: Change::LeAudioLatency(Value::Set(LeAudioLatency::Low)),
+                device: Some(bt.id.clone()),
+            },
+            &i.saved,
+            None,
+            Some(bt),
+        );
+        let c = Ctx {
+            inputs: &i,
+            edits: &edits,
+            read_only: None,
+        };
+        let v = device_view(&c, bt);
+        let picked: Vec<_> = labels(&v.le_latency_opts)
+            .into_iter()
+            .filter(|o| o.2)
+            .map(|o| o.0)
+            .collect();
+        assert_eq!(picked, ["Low latency"]);
     }
 
     #[test]

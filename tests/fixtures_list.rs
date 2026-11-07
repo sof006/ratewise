@@ -14,6 +14,7 @@ const FIXTURES: &[&str] = &[
     "arch-desktop",
     "arch-desktop-2",
     "pw-1.2-desktop",
+    "pw-1.6-le-audio",
     "pw-0.3-laptop",
     "alsa-only",
     "pulseaudio-only",

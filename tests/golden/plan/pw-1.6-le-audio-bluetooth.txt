@@ -1,0 +1,34 @@
+Set the LE Audio latency of LE Audio Earbuds to low latency (saved).
+
+Steps
+  1. Create ~/.config/wireplumber/wireplumber.conf.d/60-ratewise.conf
+     WirePlumber settings and per-device rules.
+       @@ -0,0 +1,15 @@
+       +# Written by Ratewise. It regenerates this file on every `ratewise set --save`,
+       +# so edits here are lost. `ratewise reset` removes it.
+       +monitor.bluez.rules = [
+       +  {
+       +    # LE Audio Earbuds
+       +    matches = [
+       +      { device.name = "bluez_card.00_00_00_00_00_01" }
+       +    ]
+       +    actions = {
+       +      update-props = {
+       +        bluez5.bap.force-target-latency = "low-latency"
+       +      }
+       +    }
+       +  }
+       +]
+  2. Create ~/.local/state/ratewise/saved.json
+     Ratewise's record of what it has saved.
+
+Notes
+  - Low latency suits games and video, but sound drops out more easily when the connection is weak.
+  - It applies only while the device uses LE Audio (LC3). PipeWire marks this setting as experimental.
+
+Afterwards
+  Restart PipeWire, pipewire-pulse and WirePlumber for this to take effect. Sound stops for a moment. Add --restart to do it now, or run:
+    systemctl --user restart pipewire.service pipewire-pulse.service wireplumber.service
+  WirePlumber applies the LE Audio latency when the headset connects, so after the restart turn the headset off and on again.
+
+Ratewise backs up every file first; `ratewise revert` undoes this.

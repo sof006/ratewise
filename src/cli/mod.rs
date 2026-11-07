@@ -13,7 +13,7 @@ use clap::{Args, Parser, Subcommand};
 
 use crate::app::{Env, Session};
 use crate::core::model::SampleFormat;
-use crate::core::settings::{Change, LdacQuality, Mode, Value};
+use crate::core::settings::{Change, LdacQuality, LeAudioLatency, Mode, Value};
 use crate::probe::Probes;
 
 #[derive(Debug, Parser)]
@@ -204,6 +204,15 @@ pub enum SetCommand {
         #[command(flatten)]
         opts: SetOpts,
     },
+    /// An LE Audio (LC3) device's link settings: `low` latency for games and video,
+    /// `reliable` for fewer dropouts, or `balanced` (PipeWire's default). Saved only;
+    /// needs PipeWire 1.6.
+    LeAudioLatency {
+        #[arg(value_parser = parse_le_latency)]
+        value: Value<LeAudioLatency>,
+        #[command(flatten)]
+        opts: SetOpts,
+    },
 }
 
 impl SetCommand {
@@ -225,6 +234,7 @@ impl SetCommand {
             S::Profile { value, opts } => (Change::BluetoothProfile(value), opts),
             S::HeadsetAutoswitch { value, opts } => (Change::HeadsetAutoswitch(value), opts),
             S::LdacQuality { value, opts } => (Change::LdacQuality(value), opts),
+            S::LeAudioLatency { value, opts } => (Change::LeAudioLatency(value), opts),
         }
     }
 }
@@ -387,6 +397,15 @@ fn parse_ldac(s: &str) -> Result<Value<LdacQuality>, String> {
     LdacQuality::parse(s)
         .map(Value::Set)
         .ok_or_else(|| format!("\"{s}\": use `hq` (990 kbps), `sq` (660), `mq` (330) or `auto`"))
+}
+
+fn parse_le_latency(s: &str) -> Result<Value<LeAudioLatency>, String> {
+    if is_default(s) || s.trim().eq_ignore_ascii_case("balanced") {
+        return Ok(Value::Default);
+    }
+    LeAudioLatency::parse(s)
+        .map(Value::Set)
+        .ok_or_else(|| format!("\"{s}\": use `low`, `reliable` or `balanced`"))
 }
 
 fn parse_quality(s: &str) -> Result<Value<u8>, String> {

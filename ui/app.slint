@@ -71,6 +71,9 @@ export struct DeviceView {
     // Shown only for devices that offer LDAC.
     ldac-opts: [Opt],
     ldac-why: string,
+    // Shown only for devices that offer LE Audio.
+    le-latency-opts: [Opt],
+    le-latency-why: string,
     raw: string,
 }
 
@@ -516,6 +519,15 @@ component SoundTab inherits Page {
                     picked(v) => { root.device-option("ldac", v); }
                 }
                 if root.device.ldac-why != "": Why { text: root.device.ldac-why; }
+            }
+            if root.device.le-latency-opts.length > 0 || root.device.le-latency-why != "": Row {
+                title: "LE Audio latency";
+                help: "How LE Audio (LC3) trades delay against dropouts. Saved, and used the next time the device connects.";
+                if root.device.le-latency-opts.length > 0: Segmented {
+                    opts: root.device.le-latency-opts;
+                    picked(v) => { root.device-option("le-latency", v); }
+                }
+                if root.device.le-latency-why != "": Why { text: root.device.le-latency-why; }
             }
         }
         if root.clock.headset-show: Section {
