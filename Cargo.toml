@@ -1,0 +1,26 @@
+[package]
+name = "ratewise"
+version = "0.1.0"
+edition = "2024"
+description = "View and set Linux sound-card sample rates, formats and buffer sizes"
+license = "GPL-3.0-or-later"
+publish = false
+
+[[bin]]
+name = "ratewise"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+panic = "unwind" # the crash handler (spec §6.3) needs unwinding

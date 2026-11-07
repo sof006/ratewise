@@ -1,0 +1,219 @@
+# Ratewise — Linux audio sample-rate & format manager
+
+*Working title. Rename freely.*
+
+A single-file AppImage that detects every sound device on a Linux system, shows what each one can actually do (sample rates, bit depths/formats, channels, buffer sizes), shows what it is running at right now, and lets the user change those settings live or persistently, without editing config files by hand.
+
+---
+
+## 1. Goals and non-goals
+
+### Goals
+- Works on any mainstream glibc-based distro from roughly 2020 onward, on x86_64 (aarch64 is a stretch goal).
+- **Double-click and it opens. Always.** This means no missing libraries, no FUSE errors and no GPU-driver crashes. It also must not crash when there's no sound server, no PipeWire tools or no `/dev/snd` access. Section 6 is the contract for this.
+- Detects the active audio stack (PipeWire, PulseAudio, bare ALSA, standalone JACK) and drives the right one.
+- Shows real hardware capabilities, not guesses, and clearly labels where each piece of information came from.
+- Shows the **actual running** hardware rate and format, separately from the configured value.
+- Changes can be **Live** (this session only, instant) or **Saved** (persistent across reboots). **Revert** always works.
+- Per-user only. It never needs root and never writes outside the user's config dirs.
+- Has a professional, calm UI that a non-expert can use, with enough depth for an audio nerd.
+- A CLI mode exists for scripting and remote use.
+
+### Non-goals
+- Volume mixer, EQ, per-app routing, effects (pavucontrol/Helvum/EasyEffects already do these).
+- System-wide (`/etc`) configuration.
+- Configuring a standalone JACK server. Show its status read-only and point the user to their JACK tool.
+- musl distros (Alpine, Void-musl). Document them as unsupported. NixOS is supported via `appimage-run`/binfmt, so document how.
+
+---
+
+## 2. Architecture
+
+```
+ratewise (one Rust binary)
+├── core/            pure logic, no I/O; fully unit-tested
+│   ├── model        Device, Capability, CurrentState, Setting, Change
+│   └── plan         turns a desired Change into file edits + live commands
+├── probe/           read-only discovery
+│   ├── pipewire     parse `pw-dump` JSON
+│   ├── kernel       ALSA PCM ioctls on /dev/snd/* (no libasound)
+│   ├── procfs       /proc/asound/** parsing
+│   └── stack        detect which sound server is running + versions
+├── backend/         applies changes (trait AudioBackend)
+│   ├── pipewire     pw-metadata (live) + conf.d drop-ins (persistent)
+│   ├── wireplumber  per-device rules — 0.4 (Lua) AND 0.5 (SPA-JSON)
+│   ├── pulseaudio   ~/.config/pulse/daemon.conf
+│   └── alsa         ~/.asoundrc (dmix/dsnoop defaults)
+├── cli/             clap subcommands
+└── ui/              Slint GUI
+```
+
+### Hard rules
+- **Link no C audio libraries.** No `libasound` and no `libpipewire`. They have to match the host's daemon or config and can't be bundled safely. Talk to the kernel with ioctls, and talk to PipeWire through its own CLI tools (`pw-dump`, `pw-metadata`, `wpctl`), which always match the running daemon.
+- Every external command is optional. If a tool is missing, the feature is shown as unavailable with a reason, and nothing panics.
+- `core` has no I/O. Probes and backends are traits, with fixture-driven fakes for tests.
+
+### Suggested crates
+`slint`, `serde`/`serde_json`, `clap`, `rustix` (ioctls), `thiserror`/`anyhow`, `directories`, `similar` (config diffs), `tracing` + `tracing-subscriber`. No async runtime is needed: run probes on a worker thread and post results to the UI.
+
+---
+
+## 3. Discovery (probing)
+
+Merge three sources per device, and record which source each fact came from (it's shown in the UI as a small "source" hint).
+
+### 3.1 PipeWire (primary when running)
+- Run `pw-dump`. Take nodes with `media.class` in `Audio/Sink`, `Audio/Source`, `Audio/Duplex`, plus their parent `Device`.
+- From `EnumFormat` params, read rates (lists *and* ranges), formats and channels. From props, read `api.alsa.path`, `alsa.card`, `alsa.device`, `device.bus` (usb/pci) and the description.
+- Read the current clock from the `settings` metadata: `clock.rate`, `clock.allowed-rates`, `clock.quantum`, `clock.min-quantum`, `clock.max-quantum`, `clock.force-rate`, `clock.force-quantum`.
+- Treat field names as version-dependent. Parse defensively and keep fixture tests for several PipeWire versions.
+
+### 3.2 Kernel direct (precise hardware truth)
+- For each `/dev/snd/pcmC{c}D{d}{p|c}`, open with `O_RDWR | O_NONBLOCK` and use `SNDRV_PCM_IOCTL_HW_REFINE` to get the rate interval, format mask, channel interval and period/buffer ranges.
+- Expand rate ranges into the standard list (8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000) by refining with each candidate rate and keeping the ones the kernel accepts.
+- Define the `snd_pcm_hw_params` struct and ioctl numbers from the kernel uapi headers. Add tests asserting struct size/layout per target arch.
+- **EBUSY is normal** (PipeWire holds the device). In that case, fall back to 3.1/3.3 and offer a "Probe precisely" button. That button temporarily suspends the PipeWire node (`pw-cli`/`wpctl`), probes, and resumes it, after a confirmation dialog warning that audio will drop for a moment.
+
+### 3.3 /proc/asound
+- `cards`, `cardN/id`, `cardN/stream*` (USB devices list exact rates/formats per altset, which is excellent data), and `cardN/pcm*/sub*/hw_params`. The last one is the **actual running** rate/format/period, or `closed`.
+- Refresh `hw_params` every ~1 s while the window is focused so the "Running now" value stays live.
+
+### 3.4 Stack detection
+Report: which server owns audio (PipeWire with pipewire-pulse, PulseAudio, bare ALSA, JACK), their versions, the WirePlumber version (**0.4 vs 0.5 changes the config format**), whether a systemd user session exists, and which CLI tools are present. Show this on an "About this system" panel and in `ratewise doctor`.
+
+---
+
+## 4. Applying changes
+
+Every change goes through `core::plan`, which produces a `Plan` made up of a list of live commands and file writes, each with a human-readable description. The UI shows the plan, including a **diff** of any file it will touch, before anything happens.
+
+### Settings exposed
+| Setting | Scope | Notes |
+|---|---|---|
+| Default sample rate | global | |
+| Allowed rates | global | Lets PipeWire switch rate to match content (bit-perfect-ish). Only offer rates the hardware supports. |
+| Force rate | global, live | Debug/testing. |
+| Quantum / buffer (default, min, max, force) | global | Show the latency in ms next to the frames value. |
+| Per-device format/bit depth | device | e.g. S24_LE, S32_LE |
+| Per-device rate | device | |
+| Per-device period size / headroom | device | Common fix for USB DAC crackle |
+| Resampler quality | global | |
+| Disable suspend-on-idle | device | Fixes pops at playback start |
+
+Grey out any value the device can't do, with a tooltip explaining why.
+
+### Backends
+- **PipeWire live:** `pw-metadata -n settings 0 <key> <value>`.
+- **PipeWire persistent:** write `~/.config/pipewire/pipewire.conf.d/60-ratewise.conf` (`context.properties { default.clock.rate = …, default.clock.allowed-rates = [ … ], … }`).
+- **WirePlumber per-device rules:**
+  - 0.5+: `~/.config/wireplumber/wireplumber.conf.d/60-ratewise.conf` using `monitor.alsa.rules` SPA-JSON.
+  - 0.4: `~/.config/wireplumber/main.lua.d/60-ratewise.lua` using `alsa_monitor.rules`.
+  - Match devices on a stable key (`node.name` or `device.name`), never on a numeric ID.
+- **PulseAudio:** edit `~/.config/pulse/daemon.conf` (`default-sample-rate`, `alternate-sample-rate`, `default-sample-format`, `avoid-resampling`, fragments). Create it from defaults if it's missing.
+- **Bare ALSA:** `~/.asoundrc` with `defaults.pcm.dmix.rate`, `.format` and `defaults.pcm.dsnoop.*`.
+
+### Safety
+- Ratewise owns **only its own files** (`60-ratewise.*`). It never rewrites user-authored files except PulseAudio `daemon.conf`/`.asoundrc`, which have no drop-in mechanism. For those, edit only a clearly marked block, keep any other content byte-for-byte, and back up first.
+- Back up to `~/.local/state/ratewise/backups/<timestamp>/` before any write. **Revert** restores the last backup. "Reset to defaults" removes Ratewise's files.
+- After a persistent change, offer **Restart audio services**:
+  - With a systemd user session: `systemctl --user restart pipewire pipewire-pulse wireplumber` (or `pulseaudio -k`).
+  - Without one (OpenRC/runit): fall back to killing and relaunching the processes, or tell the user to log out and back in.
+  - Warn first that playing audio will stop.
+- After applying, re-probe and show a **verification** result: requested vs. actually running. If they differ, explain the likely reason (e.g. "the device is idle, and the rate is set when playback starts").
+
+---
+
+## 5. UI
+
+The toolkit is **Slint**, using its own renderer.
+
+### Layout
+- **Left sidebar:** device list grouped as Outputs / Inputs. Each entry shows an icon (USB / built-in / HDMI / Bluetooth), the name, and a small badge with the running rate ("48 kHz · 24-bit", or "idle"). The bottom of the sidebar shows the sound-server status pill (e.g. "PipeWire 1.2 · WirePlumber 0.5").
+- **Main panel, per device:**
+  - **Overview:** a large "Running now" readout (rate / format / buffer / latency) next to the "Configured" values, plus a capability summary as chips (supported rates highlighted on a full standard-rate strip).
+  - **Sample rate & format:** segmented selectors containing only valid options.
+  - **Buffer & latency:** a quantum slider with live ms readout and plain-English hints ("lower = less latency, more risk of crackles").
+  - **Advanced:** period size, headroom, suspend, resampler, raw properties table (copyable).
+- **Global settings** page for clock/allowed rates/quantum.
+- **Bottom action bar:** `Apply live` · `Save permanently` · `Revert`, with a "Review changes" sheet showing the plan and file diffs.
+- **About this system / Doctor** page showing stack, versions, tools found, and which renderer is in use.
+
+### Feel
+- Follow the system light/dark theme where it can be detected, and offer a manual toggle.
+- Use an embedded UI font (Inter or Noto Sans, OFL) so text looks identical everywhere and doesn't depend on fontconfig.
+- Keep it consistent: 8 px spacing grid, one accent colour, no clutter. Empty and error states need real wording, e.g. "No sound devices found. This usually means you don't have access to /dev/snd. Are you in the `audio` group, or running inside a container?"
+- It must be fully keyboard-navigable, and must stay usable at 1280×720 and on HiDPI.
+
+---
+
+## 6. Packaging: the "always opens" contract
+
+### 6.1 Build
+- Target a glibc floor of **2.28** (covers roughly RHEL 8 / Debian 10 / Ubuntu 20.04 onward). Use `cargo zigbuild --target x86_64-unknown-linux-gnu.2.28`, or build inside an old container (e.g. `debian:bullseye`). CI must fail if the binary references any glibc symbol newer than the floor (check with `objdump -T`).
+- Release profile: LTO, `strip = true`, `panic = "unwind"` (so the panic handler below can run).
+
+### 6.2 AppImage
+- Use the **static type2 runtime** (the current `appimagetool` default). It does not need `libfuse2`, which is the #1 cause of "double-clicked and nothing happened" on Ubuntu 22.04+ and Fedora. Check this against the current appimagetool release.
+- Bundle every shared library the binary or Slint needs **except** the host-only allowlist:
+  - **Allowed from host:** glibc family (`libc`, `libm`, `libdl`, `libpthread`, `librt`, `ld-linux*`), `libgcc_s`, GPU driver stack (`libGL`, `libEGL`, `libGLX`, `libGLdispatch`, `libvulkan`, `libdrm`, `libgbm`).
+  - **Bundled:** everything else, typically `libxkbcommon`, `libxkbcommon-x11`, `libxcb*`, `libX11*`, `libXcursor`, `libXi`, `libXrandr`, `libwayland-client`, `libwayland-cursor`, `libwayland-egl`, plus `libfontconfig`/`libfreetype` if Slint pulls them in.
+  - Pay attention to libraries Slint/winit **dlopen** at runtime. `ldd` won't show them, so bundle them explicitly and point the loader at them from `AppRun`.
+- Include a `.desktop` file, an icon (SVG + 256 px PNG), and AppStream metainfo.
+- **Audit script** (`packaging/audit.sh`, run in CI): extract the AppImage, then run `ldd` on every ELF inside and fail if any dependency is unresolved or resolves to a host library outside the allowlist.
+
+### 6.3 Runtime resilience (in the app)
+- **Renderer fallback:** try the GPU renderer, and if context creation fails, switch automatically to Slint's software renderer. Allow forcing it with `RATEWISE_RENDERER=software`.
+- **Backend fallback:** Wayland → X11. If there's no display at all, print a clear message suggesting the CLI and exit non-zero.
+- Install a **panic handler** that writes a log to `~/.local/state/ratewise/crash-<ts>.log`. If a display is available, it also shows a minimal error window (or a `zenity`/`kdialog` popup if one is present).
+- Every probe and backend failure is non-fatal. The app must start and render with: no PipeWire, no PulseAudio, no `/dev/snd` access, no `pw-*` tools, a read-only home directory, or a missing `XDG_RUNTIME_DIR`.
+
+### 6.4 Launch test matrix (CI)
+Run `packaging/test-launch.sh`. For each container below, run the AppImage with `--appimage-extract-and-run` (containers have no FUSE) under Xvfb. The test passes if `ratewise --self-test` renders one frame offscreen to PNG and exits 0, and `ratewise doctor` exits 0.
+
+- ubuntu:20.04, 22.04, 24.04
+- debian:11, 12
+- fedora:latest
+- opensuse/tumbleweed
+- archlinux:latest
+
+Use **minimal images with no audio packages installed**. That's the point: it must still open. Repeat one run on a Wayland headless compositor (e.g. `weston --backend=headless`) to exercise the Wayland path.
+
+---
+
+## 7. CLI
+
+```
+ratewise list [--json]              devices, capabilities, running state
+ratewise show <device> [--json]
+ratewise set rate 96000 [--device X] [--live|--save]
+ratewise set allowed-rates 44100,48000,88200,96000 --save
+ratewise set quantum 256 [--live|--save]
+ratewise plan …                     print the plan + diffs, change nothing
+ratewise revert | reset
+ratewise doctor                     stack/version/tools/renderer report
+ratewise capture-fixture <dir>      dump pw-dump, /proc/asound, versions for bug reports + tests
+```
+
+Device selectors accept the stable name, the ALSA `hw:CARD=…` id, or a fuzzy description match. `--json` output is a stable, documented schema.
+
+---
+
+## 8. Testing
+
+- **Unit:** `core::plan` for every backend × setting, with golden-file tests for generated configs (WirePlumber 0.4 and 0.5 both covered).
+- **Fixtures:** `tests/fixtures/<name>/` contains `pw-dump.json`, a `/proc/asound` tree and `versions.txt`. Cover at least an onboard HDA codec, a USB DAC with 24/32-bit and high rates, an HDMI output, a Bluetooth sink, a PulseAudio-only system and an ALSA-only system. Collect real ones with `ratewise capture-fixture`.
+- **Parser robustness:** fuzz/proptest the `pw-dump` and `/proc` parsers. Garbage input must produce an error, never a panic.
+- **Packaging:** audit script + launch matrix (section 6).
+
+---
+
+## 9. Milestones
+
+1. Scaffold, `core` model, `procfs` + `pipewire` probes against fixtures, `ratewise list`/`doctor`.
+2. Kernel ioctl probe and stack detection; merge sources with provenance.
+3. Plan/apply/revert for PipeWire + WirePlumber (0.4 and 0.5), then PulseAudio and ALSA. CLI `set`/`plan`/`revert`.
+4. Slint GUI over the same core.
+5. Packaging: zigbuild, AppImage, audit script, launch matrix in CI (GitHub Actions).
+6. **Real-hardware check (Joe):** a manual checklist on real machines covering a USB DAC at 96/192 kHz, onboard audio, HDMI, a Bluetooth headset, and a PulseAudio-only VM. Confirm "Running now" changes as expected during playback.
+
+**Stretch:** aarch64 AppImage; AppImageUpdate (zsync) support; a native PKGBUILD/.deb alongside the AppImage.

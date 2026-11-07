@@ -1,0 +1,5 @@
+# Linux project edited from a Windows box: keep LF everywhere so shell scripts
+# and golden files stay byte-identical.
+* text=auto eol=lf
+*.png binary
+*.AppImage binary
