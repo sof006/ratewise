@@ -23,7 +23,7 @@ jobs:
     name: fmt, clippy, tests
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: System packages
         run: |
           sudo apt-get update -q
@@ -45,7 +45,7 @@ jobs:
     name: AppImage
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: System packages
         run: |
           sudo apt-get update -q
@@ -77,7 +77,7 @@ jobs:
         run: RATEWISE_LIBS_DEBUG=1 xvfb-run -a dist/Ratewise-x86_64.AppImage --appimage-extract-and-run --self-test
       - name: Bundled and host libraries mixed
         run: packaging/test-mixed.sh dist/Ratewise-x86_64.AppImage
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: Ratewise-x86_64.AppImage
           path: |
@@ -103,8 +103,8 @@ jobs:
           - archlinux:latest
           - wayland
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: Ratewise-x86_64.AppImage
           path: dist

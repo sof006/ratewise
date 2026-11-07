@@ -114,7 +114,8 @@ pub fn run(opts: Options) -> anyhow::Result<()> {
              `ratewise doctor` or `ratewise --help`."
         );
     }
-    if std::env::var("RATEWISE_RENDERER").as_deref() == Ok("software") {
+    let software = std::env::var("RATEWISE_RENDERER").as_deref() == Ok("software");
+    if software {
         slint::BackendSelector::new()
             .renderer_name("software".into())
             .select()
@@ -131,13 +132,16 @@ pub fn run(opts: Options) -> anyhow::Result<()> {
                 && var(X11_RETRY).is_none()
             {
                 tracing::warn!("Wayland failed ({e}); trying X11");
-                let status = std::process::Command::new(std::env::current_exe()?)
-                    .args(std::env::args_os().skip(1))
+                rerun(|c| {
                     // Without WAYLAND_DISPLAY, winit uses X11.
-                    .env_remove("WAYLAND_DISPLAY")
-                    .env(X11_RETRY, "1")
-                    .status()?;
-                std::process::exit(status.code().unwrap_or(1));
+                    c.env_remove("WAYLAND_DISPLAY").env(X11_RETRY, "1");
+                })?;
+            }
+            if !software {
+                tracing::warn!("The window failed ({e}); trying the software renderer");
+                rerun(|c| {
+                    c.env("RATEWISE_RENDERER", "software");
+                })?;
             }
             bail!(
                 "Couldn't open a window: {e}. The command line works without one: try \
@@ -230,8 +234,18 @@ pub fn run(opts: Options) -> anyhow::Result<()> {
         );
     }
 
-    w.run()
-        .map_err(|e| anyhow::anyhow!("The window stopped unexpectedly: {e}."))?;
+    if let Err(e) = w.run() {
+        // OpenGL can also fail only once the window is shown (seen on openSUSE under
+        // Xvfb: "glutin: initialization failed"), after Slint's own fallback point.
+        if !software {
+            tracing::warn!("The window failed ({e}); trying the software renderer");
+            drop(w);
+            rerun(|c| {
+                c.env("RATEWISE_RENDERER", "software");
+            })?;
+        }
+        bail!("The window stopped unexpectedly: {e}.");
+    }
     crate::crash::set_gui(false);
     match with_state(|st| st.shot_result.take()).flatten() {
         Some(Ok(msg)) => {
@@ -241,6 +255,16 @@ pub fn run(opts: Options) -> anyhow::Result<()> {
         Some(Err(e)) => bail!(e),
         None => Ok(()),
     }
+}
+
+/// Runs Ratewise again with the same arguments and a changed environment, then exits
+/// with its status. Only returns if the new process couldn't start.
+fn rerun(change: impl FnOnce(&mut std::process::Command)) -> anyhow::Result<()> {
+    let mut cmd = std::process::Command::new(std::env::current_exe()?);
+    cmd.args(std::env::args_os().skip(1));
+    change(&mut cmd);
+    let status = cmd.status()?;
+    std::process::exit(status.code().unwrap_or(1));
 }
 
 /// The system's monospace family, from fontconfig's `fc-match`. Slint doesn't resolve

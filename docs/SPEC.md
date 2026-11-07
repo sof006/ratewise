@@ -173,7 +173,7 @@ The toolkit is **Slint**, using its own renderer.
 - **Audit script** (`packaging/audit.sh`, run in CI): extract the AppImage, then run `ldd` on every ELF inside and fail if any dependency is unresolved or resolves to a host library outside the allowlist.
 
 ### 6.3 Runtime resilience (in the app)
-- **Renderer fallback:** try the GPU renderer, and if context creation fails, switch automatically to Slint's software renderer. Allow forcing it with `RATEWISE_RENDERER=software`.
+- **Renderer fallback:** try the GPU renderer, and if context creation fails, switch automatically to Slint's software renderer. Allow forcing it with `RATEWISE_RENDERER=software`. OpenGL can also fail only once the window is shown (openSUSE under Xvfb: "glutin: initialization failed"), after Slint's own fallback point, so when the window fails to open or run, Ratewise reruns itself with `RATEWISE_RENDERER=software`.
 - **Backend fallback:** Wayland → X11. If there's no display at all, print a clear message suggesting the CLI and exit non-zero. winit doesn't fall back by itself, so when the window fails with both `WAYLAND_DISPLAY` and `DISPLAY` set, Ratewise reruns itself without `WAYLAND_DISPLAY`. (Slint always uses X11 under WSL, so test Wayland on real Linux or with the WSL markers hidden.)
 - Install a **panic handler** that writes a log to `~/.local/state/ratewise/crash-<ts>.log`. If a display is available, it also shows a minimal error window (or a `zenity`/`kdialog` popup if one is present).
 - Every probe and backend failure is non-fatal. The app must start and render with: no PipeWire, no PulseAudio, no `/dev/snd` access, no `pw-*` tools, a read-only home directory, or a missing `XDG_RUNTIME_DIR`.
