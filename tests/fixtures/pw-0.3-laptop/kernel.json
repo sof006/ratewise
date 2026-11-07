@@ -1,0 +1,27 @@
+[
+  {
+    "card": 0,
+    "device": 0,
+    "direction": "playback",
+    "result": {
+      "status": "permission_denied"
+    }
+  },
+  {
+    "card": 0,
+    "device": 0,
+    "direction": "capture",
+    "result": {
+      "status": "permission_denied"
+    }
+  },
+  {
+    "card": 0,
+    "device": 3,
+    "direction": "playback",
+    "result": {
+      "status": "failed",
+      "message": "couldn't open the device (No such device (os error 19))"
+    }
+  }
+]

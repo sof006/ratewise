@@ -2,7 +2,58 @@
 //!
 //! Probes fill these in; [`crate::core::merge`] turns them into [`crate::core::model::Device`]s.
 
-use crate::core::model::{ClockSettings, Direction, RateSet, Running, SampleFormat};
+use serde::{Deserialize, Serialize};
+
+use crate::core::model::{ClockSettings, Direction, FrameRange, RateSet, Running, SampleFormat};
+
+/// One PCM device node probed with `HW_REFINE`. Also the `kernel.json` fixture format.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KernelPcmProbe {
+    pub card: u32,
+    pub device: u32,
+    pub direction: Direction,
+    pub result: KernelOutcome,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum KernelOutcome {
+    Ok(KernelCaps),
+    Busy,
+    PermissionDenied,
+    Failed { message: String },
+}
+
+/// What the driver says it can do.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KernelCaps {
+    pub formats: Vec<SampleFormat>,
+    pub rates: RateSet,
+    pub channels: Vec<u32>,
+    pub period_frames: Option<FrameRange>,
+    pub buffer_frames: Option<FrameRange>,
+}
+
+/// A PipeWire client, used to spot WirePlumber and pipewire-pulse.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PwClient {
+    pub application_name: Option<String>,
+    pub application_version: Option<String>,
+    pub config_name: Option<String>,
+}
+
+/// Facts about the session gathered outside PipeWire (or read from a fixture).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct EnvFacts {
+    /// Names of this user's sound-related processes; `None` if not checked.
+    pub processes: Option<Vec<String>>,
+    /// `Server Name` from `pactl info`, e.g. `pulseaudio` or `PulseAudio (on PipeWire 1.6.10)`.
+    pub pulse_server_name: Option<String>,
+    pub pulse_server_version: Option<String>,
+    /// From `wireplumber --version`.
+    pub wireplumber_version: Option<String>,
+    pub systemd_user_session: Option<bool>,
+}
 
 /// Parsed `/proc/asound`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -62,6 +113,7 @@ pub struct UsbAltset {
 pub struct PwDump {
     pub core_version: Option<String>,
     pub nodes: Vec<PwNode>,
+    pub clients: Vec<PwClient>,
     pub clock: Option<ClockSettings>,
     pub default_sink: Option<String>,
     pub default_source: Option<String>,

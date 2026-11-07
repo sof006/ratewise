@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use serde_json::{Map, Value};
 
-use crate::core::facts::{PwDump, PwFormat, PwNode};
+use crate::core::facts::{PwClient, PwDump, PwFormat, PwNode};
 use crate::core::model::{ClockSettings, RateSet, SampleFormat};
 use crate::probe::command::{self, RunError};
 
@@ -128,6 +128,15 @@ pub fn parse_pw_dump(json: &str) -> Result<PwDump, PwDumpParseError> {
                 }
             }
             "PipeWire:Interface:Node" => nodes.push(obj),
+            "PipeWire:Interface:Client" => {
+                if let Some(p) = props(obj) {
+                    dump.clients.push(PwClient {
+                        application_name: get_str(p, "application.name"),
+                        application_version: get_str(p, "application.version"),
+                        config_name: get_str(p, "config.name"),
+                    });
+                }
+            }
             "PipeWire:Interface:Metadata" => parse_metadata(obj, &mut dump),
             _ => {}
         }

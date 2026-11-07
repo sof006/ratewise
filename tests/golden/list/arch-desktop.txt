@@ -51,5 +51,8 @@ Inputs
     id        alsa_input.usb-SteelSeries_Arctis_Nova_7-00.mono-fallback
     alsa      hw:CARD=A7,DEV=0
 
-PipeWire 1.6.10 clock: default 48 kHz · allowed 48 kHz · quantum 1024 (min 32, max 2048)  [from PipeWire]
+Sound server: PipeWire 1.6.10 · WirePlumber 0.5.18 · pipewire-pulse
+PipeWire clock: default 48 kHz · allowed 48 kHz · quantum 1024 (min 32, max 2048)  [from PipeWire]
 
+Notes
+  kernel: this fixture has no kernel.json, so there are no direct hardware readings

@@ -7,3 +7,4 @@ pipewire: pipewire | Compiled with libpipewire 0.3.48 | Linked with libpipewire 
 wireplumber: wireplumber | Compiled with libwireplumber 0.4.8 | Linked with libwireplumber 0.4.8
 pactl: pactl 15.99.1 | Compiled with libpulse 15.99.0 | Linked with libpulse 15.99.0
 pulse-server: PulseAudio (on PipeWire 0.3.48)
+systemd-user-session: yes

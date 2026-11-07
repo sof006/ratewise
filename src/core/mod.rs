@@ -6,3 +6,4 @@ pub mod merge;
 pub mod model;
 pub mod plan;
 pub mod redact;
+pub mod stack;

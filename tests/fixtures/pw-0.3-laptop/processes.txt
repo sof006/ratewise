@@ -1,0 +1,4 @@
+# Sound-server processes this user was running
+pipewire
+pipewire-pulse
+wireplumber

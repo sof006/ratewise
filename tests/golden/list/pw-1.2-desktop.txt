@@ -1,23 +1,29 @@
 Outputs
   Built-in Audio Analog Stereo — built-in
     running   idle  [from /proc/asound]
-    rates     44.1, 48, 96, 192 kHz  [from PipeWire]
-    formats   S16_LE (16-bit), S32_LE (32-bit)  [from PipeWire]
-    channels  2  [from PipeWire]
+    rates     44.1, 48, 96, 192 kHz  [from kernel]
+    formats   S16_LE (16-bit), S32_LE (32-bit)  [from kernel]
+    channels  2, 4, 6, 8  [from kernel]
+    period    32–524288 frames  [from kernel]
+    buffer    64–1048576 frames  [from kernel]
     id        alsa_output.pci-0000_00_1f.3.analog-stereo
     alsa      hw:CARD=PCH,DEV=0
   GP104 High Definition Audio Controller Digital Stereo (HDMI) — HDMI
     running   idle  [from /proc/asound]
-    rates     32, 44.1, 48, 88.2, 96, 176.4, 192 kHz  [from PipeWire]
-    formats   S16_LE (16-bit), S32_LE (32-bit)  [from PipeWire]
-    channels  2  [from PipeWire]
+    rates     32, 44.1, 48, 88.2, 96, 176.4, 192 kHz  [from kernel]
+    formats   S16_LE (16-bit), S32_LE (32-bit)  [from kernel]
+    channels  2, 3, 4, 5, 6, 7, 8  [from kernel]
+    period    32–524288 frames  [from kernel]
+    buffer    64–1048576 frames  [from kernel]
     id        alsa_output.pci-0000_01_00.1.hdmi-stereo
     alsa      hw:CARD=NVidia,DEV=3
   HDA NVidia: HDMI 1 — HDMI
     running   idle  [from /proc/asound]
-    rates     unknown
-    formats   unknown
-    channels  unknown
+    rates     32, 44.1, 48, 88.2, 96, 176.4, 192 kHz  [from kernel]
+    formats   S16_LE (16-bit), S32_LE (32-bit)  [from kernel]
+    channels  2, 3, 4, 5, 6, 7, 8  [from kernel]
+    period    32–524288 frames  [from kernel]
+    buffer    64–1048576 frames  [from kernel]
     id        alsa:NVidia:7:playback
     alsa      hw:CARD=NVidia,DEV=7
   D50s Analog Stereo — USB, default
@@ -25,6 +31,7 @@ Outputs
     rates     44.1, 48, 88.2, 96, 176.4, 192, 352.8, 384, 705.6, 768 kHz  [from /proc/asound]
     formats   S24_3LE (24-bit), S32_LE (32-bit)  [from /proc/asound]
     channels  2  [from /proc/asound]
+    kernel    busy: another program has it open, so the details above come from other sources
     id        alsa_output.usb-Topping_D50s-00.analog-stereo
     alsa      hw:CARD=D50s,DEV=0
   Bluetooth Headphones — Bluetooth
@@ -37,11 +44,14 @@ Outputs
 Inputs
   Built-in Audio Analog Stereo — built-in, default
     running   idle  [from /proc/asound]
-    rates     44.1, 48, 96, 192 kHz  [from PipeWire]
-    formats   S16_LE (16-bit), S32_LE (32-bit)  [from PipeWire]
-    channels  2  [from PipeWire]
+    rates     44.1, 48, 96, 192 kHz  [from kernel]
+    formats   S16_LE (16-bit), S32_LE (32-bit)  [from kernel]
+    channels  2  [from kernel]
+    period    32–524288 frames  [from kernel]
+    buffer    64–1048576 frames  [from kernel]
     id        alsa_input.pci-0000_00_1f.3.analog-stereo
     alsa      hw:CARD=PCH,DEV=0
 
-PipeWire 1.2.7 clock: default 48 kHz · allowed 44.1, 48, 88.2, 96 kHz · quantum 1024 (min 32, max 2048)  [from PipeWire]
+Sound server: PipeWire 1.2.7 · WirePlumber 0.5.6 · pipewire-pulse
+PipeWire clock: default 48 kHz · allowed 44.1, 48, 88.2, 96 kHz · quantum 1024 (min 32, max 2048)  [from PipeWire]
 

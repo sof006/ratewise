@@ -452,6 +452,7 @@ dependencies = [
  "anyhow",
  "clap",
  "proptest",
+ "rustix",
  "serde",
  "serde_json",
  "similar",

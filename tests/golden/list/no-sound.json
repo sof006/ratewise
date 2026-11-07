@@ -3,6 +3,15 @@
   "devices": [],
   "clock": null,
   "pipewire_version": null,
+  "stack": {
+    "server": "none",
+    "pipewire_version": null,
+    "pipewire_pulse": false,
+    "session_manager": null,
+    "pulseaudio_version": null,
+    "jack_running": false,
+    "systemd_user_session": false
+  },
   "notes": [
     {
       "source": "Procfs",
@@ -11,6 +20,10 @@
     {
       "source": "PipeWire",
       "message": "this fixture has no pw-dump.json, so it simulates a system without PipeWire"
+    },
+    {
+      "source": "Kernel",
+      "message": "this fixture has no kernel.json, so there are no direct hardware readings"
     }
   ]
 }

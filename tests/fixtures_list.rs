@@ -5,7 +5,8 @@ mod common;
 use common::{assert_golden, fixture};
 use ratewise::cli::list::{render_json, render_text};
 use ratewise::core::model::{
-    DeviceKind, Direction, RateSet, Running, SampleFormat, Snapshot, Source,
+    DeviceKind, Direction, FrameRange, KernelProbeStatus, RateSet, Running, SampleFormat,
+    SessionManager, Snapshot, SoundServer, Source, WirePlumberConfig,
 };
 use ratewise::probe::Probes;
 
@@ -17,6 +18,13 @@ const FIXTURES: &[&str] = &[
     "pulseaudio-only",
     "no-sound",
 ];
+
+fn wireplumber(version: &str, config: WirePlumberConfig) -> Option<SessionManager> {
+    Some(SessionManager::WirePlumber {
+        version: Some(version.into()),
+        config: Some(config),
+    })
+}
 
 fn snapshot(name: &str) -> Snapshot {
     Probes::fixture(&fixture(name)).snapshot()
@@ -60,11 +68,12 @@ fn pipewire_1_2_desktop() {
     let dac = device(&snap, "alsa_output.usb-Topping_D50s-00.analog-stereo");
     assert_eq!(dac.kind, DeviceKind::Usb);
     assert!(dac.pipewire.as_ref().unwrap().is_default);
+    assert_eq!(dac.kernel_probe, Some(KernelProbeStatus::Busy));
     let rates = dac.capabilities.rates.as_ref().unwrap();
     assert_eq!(
         rates.source,
         Source::Procfs,
-        "USB stream file beats PipeWire's range"
+        "busy, so the USB stream file beats PipeWire's range"
     );
     assert_eq!(rates.value.standard_rates().len(), 10);
     assert_eq!(
@@ -84,9 +93,20 @@ fn pipewire_1_2_desktop() {
     let hdmi = device(&snap, "alsa_output.pci-0000_01_00.1.hdmi-stereo");
     assert_eq!(hdmi.kind, DeviceKind::Hdmi);
     assert_eq!(hdmi.alsa.as_ref().unwrap().hw_id(), "hw:CARD=NVidia,DEV=3");
+    assert_eq!(hdmi.kernel_probe, Some(KernelProbeStatus::Ok));
+    let rates = hdmi.capabilities.rates.as_ref().unwrap();
+    assert_eq!(rates.source, Source::Kernel, "idle, so the kernel answered");
+    assert_eq!(rates.value.standard_rates().len(), 7);
     assert_eq!(
-        hdmi.capabilities.rates.as_ref().unwrap().source,
-        Source::PipeWire
+        hdmi.capabilities.channels.as_ref().unwrap().value,
+        (2..=8).collect::<Vec<_>>()
+    );
+    assert_eq!(
+        hdmi.capabilities.buffer_frames.as_ref().unwrap().value,
+        FrameRange {
+            min: 64,
+            max: 1_048_576
+        }
     );
 
     let unused_hdmi = device(&snap, "alsa:NVidia:7:playback");
@@ -113,6 +133,20 @@ fn pipewire_1_2_desktop() {
         (clock.min_quantum, clock.max_quantum),
         (Some(32), Some(2048))
     );
+
+    let st = &snap.stack;
+    assert_eq!(st.server, SoundServer::PipeWire);
+    assert_eq!(st.pipewire_version.as_deref(), Some("1.2.7"));
+    assert!(st.pipewire_pulse);
+    assert_eq!(
+        st.session_manager,
+        wireplumber("0.5.6", WirePlumberConfig::SpaJson05)
+    );
+    assert_eq!(st.systemd_user_session, Some(true));
+    assert_eq!(
+        st.summary(),
+        "PipeWire 1.2.7 · WirePlumber 0.5.6 · pipewire-pulse"
+    );
 }
 
 #[test]
@@ -131,8 +165,23 @@ fn pipewire_0_3_string_values() {
     assert_eq!(clock.allowed_rates, Some(vec![48_000]));
     assert_eq!(clock.quantum, Some(1024));
     assert_eq!(clock.min_quantum, None);
+    // Not in the `audio` group: the kernel refused, PipeWire's answer stands.
+    assert_eq!(sink.kernel_probe, Some(KernelProbeStatus::PermissionDenied));
+    assert_eq!(
+        sink.capabilities.rates.as_ref().unwrap().source,
+        Source::PipeWire
+    );
     // HDMI isn't in the active profile, so it shows up from /proc/asound only.
-    assert!(device(&snap, "alsa:PCH:3:playback").pipewire.is_none());
+    let hdmi = device(&snap, "alsa:PCH:3:playback");
+    assert!(hdmi.pipewire.is_none());
+    assert!(matches!(
+        hdmi.kernel_probe,
+        Some(KernelProbeStatus::Failed { .. })
+    ));
+    assert_eq!(
+        snap.stack.session_manager,
+        wireplumber("0.4.8", WirePlumberConfig::Lua04)
+    );
 }
 
 #[test]
@@ -141,20 +190,49 @@ fn alsa_only() {
     assert!(snap.clock.is_none());
     assert_eq!(snap.notes.len(), 1);
     assert_eq!(snap.notes[0].source, Source::PipeWire);
+    assert_eq!(snap.stack.server, SoundServer::Alsa);
+    assert_eq!(snap.stack.summary(), "ALSA only (no sound server)");
+
     let mic = device(&snap, "alsa:Device:0:capture");
     assert_eq!(mic.kind, DeviceKind::Usb);
+    // The kernel's per-rate answers replace the USB stream file's continuous range.
+    let rates = mic.capabilities.rates.as_ref().unwrap();
+    assert_eq!(rates.source, Source::Kernel);
     assert_eq!(
-        mic.capabilities.rates.as_ref().unwrap().value,
-        RateSet::range(8_000, 48_000)
+        rates.value,
+        RateSet::discrete([8_000, 11_025, 16_000, 22_050, 32_000, 44_100, 48_000])
     );
     assert_eq!(mic.capabilities.channels.as_ref().unwrap().value, vec![1]);
+
+    // The HDA output was running, so its device node was busy.
+    let out = device(&snap, "alsa:PCH:0:playback");
+    assert_eq!(out.kernel_probe, Some(KernelProbeStatus::Busy));
+    assert!(out.capabilities.rates.is_none());
+    assert!(matches!(
+        out.running.as_ref().unwrap().value,
+        Running::Active(_)
+    ));
+}
+
+#[test]
+fn pulseaudio_only() {
+    let snap = snapshot("pulseaudio-only");
+    let st = &snap.stack;
+    assert_eq!(st.server, SoundServer::PulseAudio);
+    assert_eq!(st.pulseaudio_version.as_deref(), Some("15.99.1"));
+    assert!(!st.pipewire_pulse);
+    assert_eq!(st.session_manager, None);
+    assert_eq!(snap.notes.len(), 1, "{:?}", snap.notes);
+    assert_eq!(snap.notes[0].source, Source::PipeWire);
 }
 
 #[test]
 fn no_sound() {
     let snap = snapshot("no-sound");
     assert!(snap.devices.is_empty());
-    assert_eq!(snap.notes.len(), 2);
+    assert_eq!(snap.stack.server, SoundServer::None);
+    let sources: Vec<Source> = snap.notes.iter().map(|n| n.source).collect();
+    assert_eq!(sources, [Source::Procfs, Source::PipeWire, Source::Kernel]);
     assert!(render_text(&snap).starts_with("No sound devices found."));
 }
 
@@ -162,7 +240,16 @@ fn no_sound() {
 #[test]
 fn real_arch_desktop() {
     let snap = snapshot("arch-desktop");
-    assert!(snap.notes.is_empty(), "{:?}", snap.notes);
+    // Captured before kernel.json existed.
+    assert_eq!(snap.notes.len(), 1, "{:?}", snap.notes);
+    assert_eq!(snap.notes[0].source, Source::Kernel);
+    // No processes.txt either: WirePlumber and pipewire-pulse are found from pw-dump's clients.
+    let st = &snap.stack;
+    assert_eq!(
+        st.session_manager,
+        wireplumber("0.5.18", WirePlumberConfig::SpaJson05)
+    );
+    assert!(st.pipewire_pulse);
     assert_eq!(snap.pipewire_version.as_deref(), Some("1.6.10"));
     // 4 hardware nodes + 3 HDMI PCMs the active profile doesn't use.
     assert_eq!(snap.devices.len(), 7);

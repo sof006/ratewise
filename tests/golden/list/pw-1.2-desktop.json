@@ -31,20 +31,37 @@
               192000
             ]
           },
-          "source": "PipeWire"
+          "source": "Kernel"
         },
         "formats": {
           "value": [
             "S16_LE",
             "S32_LE"
           ],
-          "source": "PipeWire"
+          "source": "Kernel"
         },
         "channels": {
           "value": [
-            2
+            2,
+            4,
+            6,
+            8
           ],
-          "source": "PipeWire"
+          "source": "Kernel"
+        },
+        "period_frames": {
+          "value": {
+            "min": 32,
+            "max": 524288
+          },
+          "source": "Kernel"
+        },
+        "buffer_frames": {
+          "value": {
+            "min": 64,
+            "max": 1048576
+          },
+          "source": "Kernel"
         }
       },
       "running": {
@@ -52,6 +69,9 @@
           "state": "idle"
         },
         "source": "Procfs"
+      },
+      "kernel_probe": {
+        "status": "ok"
       }
     },
     {
@@ -87,20 +107,40 @@
               192000
             ]
           },
-          "source": "PipeWire"
+          "source": "Kernel"
         },
         "formats": {
           "value": [
             "S16_LE",
             "S32_LE"
           ],
-          "source": "PipeWire"
+          "source": "Kernel"
         },
         "channels": {
           "value": [
-            2
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8
           ],
-          "source": "PipeWire"
+          "source": "Kernel"
+        },
+        "period_frames": {
+          "value": {
+            "min": 32,
+            "max": 524288
+          },
+          "source": "Kernel"
+        },
+        "buffer_frames": {
+          "value": {
+            "min": 64,
+            "max": 1048576
+          },
+          "source": "Kernel"
         }
       },
       "running": {
@@ -108,6 +148,9 @@
           "state": "idle"
         },
         "source": "Procfs"
+      },
+      "kernel_probe": {
+        "status": "ok"
       }
     },
     {
@@ -124,15 +167,63 @@
       },
       "pipewire": null,
       "capabilities": {
-        "rates": null,
-        "formats": null,
-        "channels": null
+        "rates": {
+          "value": {
+            "kind": "discrete",
+            "rates": [
+              32000,
+              44100,
+              48000,
+              88200,
+              96000,
+              176400,
+              192000
+            ]
+          },
+          "source": "Kernel"
+        },
+        "formats": {
+          "value": [
+            "S16_LE",
+            "S32_LE"
+          ],
+          "source": "Kernel"
+        },
+        "channels": {
+          "value": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8
+          ],
+          "source": "Kernel"
+        },
+        "period_frames": {
+          "value": {
+            "min": 32,
+            "max": 524288
+          },
+          "source": "Kernel"
+        },
+        "buffer_frames": {
+          "value": {
+            "min": 64,
+            "max": 1048576
+          },
+          "source": "Kernel"
+        }
       },
       "running": {
         "value": {
           "state": "idle"
         },
         "source": "Procfs"
+      },
+      "kernel_probe": {
+        "status": "ok"
       }
     },
     {
@@ -185,7 +276,9 @@
             2
           ],
           "source": "Procfs"
-        }
+        },
+        "period_frames": null,
+        "buffer_frames": null
       },
       "running": {
         "value": {
@@ -197,6 +290,9 @@
           "buffer_frames": 8192
         },
         "source": "Procfs"
+      },
+      "kernel_probe": {
+        "status": "busy"
       }
     },
     {
@@ -233,14 +329,17 @@
             2
           ],
           "source": "PipeWire"
-        }
+        },
+        "period_frames": null,
+        "buffer_frames": null
       },
       "running": {
         "value": {
           "state": "idle"
         },
         "source": "PipeWire"
-      }
+      },
+      "kernel_probe": null
     },
     {
       "id": "alsa_input.pci-0000_00_1f.3.analog-stereo",
@@ -272,20 +371,34 @@
               192000
             ]
           },
-          "source": "PipeWire"
+          "source": "Kernel"
         },
         "formats": {
           "value": [
             "S16_LE",
             "S32_LE"
           ],
-          "source": "PipeWire"
+          "source": "Kernel"
         },
         "channels": {
           "value": [
             2
           ],
-          "source": "PipeWire"
+          "source": "Kernel"
+        },
+        "period_frames": {
+          "value": {
+            "min": 32,
+            "max": 524288
+          },
+          "source": "Kernel"
+        },
+        "buffer_frames": {
+          "value": {
+            "min": 64,
+            "max": 1048576
+          },
+          "source": "Kernel"
         }
       },
       "running": {
@@ -293,6 +406,9 @@
           "state": "idle"
         },
         "source": "Procfs"
+      },
+      "kernel_probe": {
+        "status": "ok"
       }
     }
   ],
@@ -314,5 +430,18 @@
     "source": "PipeWire"
   },
   "pipewire_version": "1.2.7",
+  "stack": {
+    "server": "pipewire",
+    "pipewire_version": "1.2.7",
+    "pipewire_pulse": true,
+    "session_manager": {
+      "name": "wireplumber",
+      "version": "0.5.6",
+      "config": "spa-json-0.5"
+    },
+    "pulseaudio_version": null,
+    "jack_running": false,
+    "systemd_user_session": true
+  },
   "notes": []
 }

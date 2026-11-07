@@ -1,5 +1,8 @@
 No sound devices found. This usually means you don't have access to /dev/snd. Are you in the `audio` group, or running inside a container?
 
+Sound server: No sound server
+
 Notes
   /proc/asound: tests/fixtures/no-sound/proc-asound doesn't exist, so the kernel isn't showing any ALSA sound cards. This is normal inside containers and WSL. On a desktop it means the sound drivers aren't loaded.
   PipeWire: this fixture has no pw-dump.json, so it simulates a system without PipeWire
+  kernel: this fixture has no kernel.json, so there are no direct hardware readings

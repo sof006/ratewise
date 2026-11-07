@@ -9,8 +9,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, bail};
 
+use crate::core::facts::EnvFacts;
 use crate::core::redact::Redactor;
 use crate::probe::command;
+use crate::probe::kernel::{DevSnd, KernelSource};
+use crate::probe::stack::{EnvSource, LiveEnv};
 
 /// A redactor primed with this machine's login and host names.
 fn local_identity() -> Redactor {
@@ -85,8 +88,28 @@ pub fn run(dir: &Path) -> anyhow::Result<()> {
         summary.push("no proc-asound/: /proc/asound doesn't exist here".into());
     }
 
-    // Versions, for stack detection tests.
-    fs::write(dir.join("versions.txt"), versions())?;
+    // Direct kernel readings. Busy devices are recorded as busy, not reopened.
+    match DevSnd::default().probe() {
+        Ok(probes) => {
+            let text = serde_json::to_string_pretty(&probes)? + "\n";
+            fs::write(dir.join("kernel.json"), text)?;
+            summary.push(format!("kernel.json ({} PCM devices)", probes.len()));
+        }
+        Err(e) => summary.push(format!("no kernel.json: {e}")),
+    }
+
+    // Session facts, for stack detection tests.
+    let env = LiveEnv.env_facts();
+    if let Some(procs) = &env.processes {
+        let mut text = String::from("# Sound-server processes this user was running\n");
+        for p in procs {
+            text.push_str(p);
+            text.push('\n');
+        }
+        fs::write(dir.join("processes.txt"), text)?;
+        summary.push("processes.txt".into());
+    }
+    fs::write(dir.join("versions.txt"), versions(&env))?;
     summary.push("versions.txt".into());
 
     if let Ok(out) = command::run("wpctl", &["status"], Duration::from_secs(5))
@@ -144,7 +167,7 @@ fn copy_tree(src: &Path, dst: &Path, depth: usize, files: &mut usize) -> anyhow:
     Ok(())
 }
 
-fn versions() -> String {
+fn versions(env: &EnvFacts) -> String {
     let mut s = format!(
         "# Captured by ratewise {} capture-fixture\nsynthetic: false\n",
         env!("CARGO_PKG_VERSION")
@@ -182,13 +205,16 @@ fn versions() -> String {
         };
         s.push_str(&format!("{key}: {value}\n"));
     }
-    if let Ok(out) = command::run("pactl", &["info"], Duration::from_secs(5))
-        && let Some(server) = out
-            .stdout
-            .lines()
-            .find_map(|l| l.strip_prefix("Server Name:"))
-    {
-        s.push_str(&format!("pulse-server: {}\n", server.trim()));
+    // From the gated `pactl info` in LiveEnv, which never autospawns a server.
+    if let Some(v) = &env.pulse_server_name {
+        s.push_str(&format!("pulse-server: {v}\n"));
+    }
+    if let Some(v) = &env.pulse_server_version {
+        s.push_str(&format!("pulse-server-version: {v}\n"));
+    }
+    if let Some(v) = env.systemd_user_session {
+        let yn = if v { "yes" } else { "no" };
+        s.push_str(&format!("systemd-user-session: {yn}\n"));
     }
     s
 }

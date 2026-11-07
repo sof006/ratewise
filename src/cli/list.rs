@@ -3,8 +3,8 @@
 use std::fmt::Write;
 
 use crate::core::model::{
-    ClockSettings, Device, Direction, NO_DEVICES_MESSAGE, RateSet, Running, SampleFormat, Snapshot,
-    Sourced, khz,
+    ClockSettings, Device, Direction, FrameRange, KernelProbeStatus, NO_DEVICES_MESSAGE, RateSet,
+    Running, SampleFormat, Snapshot, Sourced, khz,
 };
 use crate::probe::Probes;
 
@@ -48,19 +48,16 @@ pub fn render_text(snap: &Snapshot) -> String {
         let _ = writeln!(s);
     }
 
+    let _ = writeln!(s, "Sound server: {}", snap.stack.summary());
     if let Some(clock) = &snap.clock {
-        let version = snap
-            .pipewire_version
-            .as_deref()
-            .map(|v| format!(" {v}"))
-            .unwrap_or_default();
         let _ = writeln!(
             s,
-            "PipeWire{version} clock: {}  [from {}]\n",
+            "PipeWire clock: {}  [from {}]",
             clock_text(&clock.value),
             clock.source
         );
     }
+    let _ = writeln!(s);
 
     if !snap.notes.is_empty() {
         let _ = writeln!(s, "Notes");
@@ -94,6 +91,27 @@ fn device(s: &mut String, d: &Device) {
         |c| join(c.iter().map(u32::to_string)),
         "unknown",
     );
+    let frames = |r: &FrameRange| format!("{}–{} frames", r.min, r.max);
+    if caps.period_frames.is_some() {
+        row(s, "period", caps.period_frames.as_ref(), frames, "");
+    }
+    if caps.buffer_frames.is_some() {
+        row(s, "buffer", caps.buffer_frames.as_ref(), frames, "");
+    }
+    let kernel_note = match &d.kernel_probe {
+        Some(KernelProbeStatus::Busy) => Some(
+            "busy: another program has it open, so the details above come from other sources"
+                .to_string(),
+        ),
+        Some(KernelProbeStatus::PermissionDenied) => {
+            Some("no permission to open it in /dev/snd. Are you in the `audio` group?".to_string())
+        }
+        Some(KernelProbeStatus::Failed { message }) => Some(format!("probe failed: {message}")),
+        Some(KernelProbeStatus::Ok) | None => None,
+    };
+    if let Some(note) = kernel_note {
+        let _ = writeln!(s, "    {:<9} {note}", "kernel");
+    }
     let _ = writeln!(s, "    {:<9} {}", "id", d.id);
     if let Some(alsa) = &d.alsa {
         let _ = writeln!(s, "    {:<9} {}", "alsa", alsa.hw_id());

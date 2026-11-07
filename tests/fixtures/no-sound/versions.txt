@@ -5,3 +5,4 @@ os: Ubuntu 24.04.5 LTS
 pipewire: not installed
 wireplumber: not installed
 pactl: not installed
+systemd-user-session: no

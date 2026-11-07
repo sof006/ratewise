@@ -1,0 +1,2 @@
+# Sound-server processes this user was running
+pulseaudio

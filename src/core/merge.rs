@@ -1,20 +1,37 @@
 //! Merges per-source facts into one device list, recording where each fact came from.
 //!
-//! Preference per field: USB stream files (exact per-altset data) over PipeWire's
-//! `EnumFormat`; `hw_params` (what the hardware is really doing) over PipeWire's node state.
+//! Capabilities, per field: the kernel probe (the driver's own answer) over USB
+//! stream files (exact per-altset data) over PipeWire's `EnumFormat`.
+//! Running state: `hw_params` (what the hardware is really doing) over PipeWire's node state.
 
 use std::collections::HashSet;
 
-use crate::core::facts::{ProcAsound, ProcCard, ProcPcm, PwDump, PwFormat, PwNode};
+use crate::core::facts::{
+    KernelOutcome, KernelPcmProbe, ProcAsound, ProcCard, ProcPcm, PwDump, PwFormat, PwNode,
+};
 use crate::core::model::{
-    AlsaPcm, Capabilities, Device, DeviceKind, Direction, PipeWireNode, ProbeNote, RateSet,
-    Running, SCHEMA_VERSION, Snapshot, Source, Sourced, StreamParams,
+    AlsaPcm, Capabilities, Device, DeviceKind, Direction, KernelProbeStatus, PipeWireNode,
+    ProbeNote, RateSet, Running, SCHEMA_VERSION, Snapshot, Source, Sourced, StackReport,
+    StreamParams,
 };
 
-pub fn merge(procfs: Option<&ProcAsound>, pw: Option<&PwDump>, notes: Vec<ProbeNote>) -> Snapshot {
+/// Everything the probes found. Any source may be missing.
+pub struct Facts<'a> {
+    pub procfs: Option<&'a ProcAsound>,
+    pub pipewire: Option<&'a PwDump>,
+    pub kernel: Option<&'a [KernelPcmProbe]>,
+    pub stack: StackReport,
+}
+
+pub fn merge(facts: Facts<'_>, notes: Vec<ProbeNote>) -> Snapshot {
+    let Facts {
+        procfs,
+        pipewire: pw,
+        kernel,
+        stack,
+    } = facts;
     let mut devices = Vec::new();
     let mut claimed: HashSet<(u32, u32, Direction)> = HashSet::new();
-
     if let Some(pw) = pw {
         for node in &pw.nodes {
             let Some(direction) = direction_from_media_class(&node.media_class) else {
@@ -42,6 +59,12 @@ pub fn merge(procfs: Option<&ProcAsound>, pw: Option<&PwDump>, notes: Vec<ProbeN
         }
     }
 
+    if let Some(kernel) = kernel {
+        for d in &mut devices {
+            apply_kernel(d, kernel);
+        }
+    }
+
     devices.sort_by(|a, b| {
         let key = |d: &Device| {
             (
@@ -62,8 +85,49 @@ pub fn merge(procfs: Option<&ProcAsound>, pw: Option<&PwDump>, notes: Vec<ProbeN
             .and_then(|p| p.clock.clone())
             .map(|c| Sourced::new(c, Source::PipeWire)),
         pipewire_version: pw.and_then(|p| p.core_version.clone()),
+        stack,
         notes,
     }
+}
+
+/// Overlays the kernel's answer for this device's PCM, and records how the probe went.
+fn apply_kernel(d: &mut Device, probes: &[KernelPcmProbe]) {
+    let Some(alsa) = &d.alsa else {
+        return;
+    };
+    let want = match d.direction {
+        Direction::Duplex => Direction::Playback,
+        other => other,
+    };
+    let Some(probe) = probes
+        .iter()
+        .find(|p| p.card == alsa.card && p.device == alsa.device && p.direction == want)
+    else {
+        return;
+    };
+    d.kernel_probe = Some(match &probe.result {
+        KernelOutcome::Ok(caps) => {
+            let k = |v| Some(Sourced::new(v, Source::Kernel));
+            let c = &mut d.capabilities;
+            if !caps.formats.is_empty() {
+                c.formats = k(caps.formats.clone());
+            }
+            if caps.rates != RateSet::discrete([]) {
+                c.rates = Some(Sourced::new(caps.rates.clone(), Source::Kernel));
+            }
+            if !caps.channels.is_empty() {
+                c.channels = Some(Sourced::new(caps.channels.clone(), Source::Kernel));
+            }
+            c.period_frames = caps.period_frames.map(|r| Sourced::new(r, Source::Kernel));
+            c.buffer_frames = caps.buffer_frames.map(|r| Sourced::new(r, Source::Kernel));
+            KernelProbeStatus::Ok
+        }
+        KernelOutcome::Busy => KernelProbeStatus::Busy,
+        KernelOutcome::PermissionDenied => KernelProbeStatus::PermissionDenied,
+        KernelOutcome::Failed { message } => KernelProbeStatus::Failed {
+            message: message.clone(),
+        },
+    });
 }
 
 fn direction_from_media_class(class: &str) -> Option<Direction> {
@@ -119,6 +183,7 @@ fn device_from_node(
         rates: usb.rates.or(from_pw.rates),
         formats: usb.formats.or(from_pw.formats),
         channels: usb.channels.or(from_pw.channels),
+        ..Default::default()
     };
 
     let running = pcm
@@ -148,6 +213,7 @@ fn device_from_node(
         }),
         capabilities,
         running,
+        kernel_probe: None,
     }
 }
 
@@ -161,6 +227,7 @@ fn device_from_pcm(card: &ProcCard, pcm: &ProcPcm) -> Device {
         pipewire: None,
         capabilities: usb_capabilities(card, pcm),
         running: pcm.running.clone().map(|r| Sourced::new(r, Source::Procfs)),
+        kernel_probe: None,
     }
 }
 
@@ -199,6 +266,7 @@ fn usb_capabilities(card: &ProcCard, pcm: &ProcPcm) -> Capabilities {
         rates: rates.map(|r| Sourced::new(r, Source::Procfs)),
         formats: non_empty(formats).map(|f| Sourced::new(f, Source::Procfs)),
         channels: non_empty(channels).map(|c| Sourced::new(c, Source::Procfs)),
+        ..Default::default()
     }
 }
 
@@ -213,6 +281,7 @@ fn pw_capabilities(formats: &[PwFormat]) -> Capabilities {
         rates: rates.map(|r| Sourced::new(r, Source::PipeWire)),
         formats: non_empty(sample_formats).map(|f| Sourced::new(f, Source::PipeWire)),
         channels: non_empty(channels).map(|c| Sourced::new(c, Source::PipeWire)),
+        ..Default::default()
     }
 }
 
@@ -362,7 +431,7 @@ mod tests {
             default_sink: Some("alsa_output.usb-dac".into()),
             ..Default::default()
         };
-        let snap = merge(Some(&procfs), Some(&pw), vec![]);
+        let snap = run(Some(&procfs), Some(&pw), None);
         assert_eq!(snap.devices.len(), 1, "PCM should merge into the node");
         let d = &snap.devices[0];
         assert_eq!(d.kind, DeviceKind::Usb);
@@ -387,7 +456,7 @@ mod tests {
             nodes: vec![usb_node(), virt],
             ..Default::default()
         };
-        let snap = merge(None, Some(&pw), vec![]);
+        let snap = run(None, Some(&pw), None);
         assert_eq!(snap.devices.len(), 1);
         let d = &snap.devices[0];
         assert_eq!(
@@ -403,9 +472,82 @@ mod tests {
         let procfs = ProcAsound {
             cards: vec![usb_card()],
         };
-        let snap = merge(Some(&procfs), None, vec![]);
+        let snap = run(Some(&procfs), None, None);
         assert_eq!(snap.devices[0].id, "alsa:DAC:0:playback");
         assert_eq!(snap.devices[0].description, "USB DAC: USB Audio");
         assert!(snap.clock.is_none());
+    }
+
+    fn run(
+        procfs: Option<&ProcAsound>,
+        pw: Option<&PwDump>,
+        kernel: Option<&[KernelPcmProbe]>,
+    ) -> Snapshot {
+        let stack = crate::core::stack::detect(pw, &Default::default(), procfs.is_some());
+        merge(
+            Facts {
+                procfs,
+                pipewire: pw,
+                kernel,
+                stack,
+            },
+            vec![],
+        )
+    }
+
+    #[test]
+    fn kernel_beats_usb_stream_and_busy_keeps_other_sources() {
+        use crate::core::facts::KernelCaps;
+        use crate::core::model::FrameRange;
+
+        let mut card = usb_card();
+        card.pcms.push(ProcPcm {
+            device: 1,
+            direction: Direction::Playback,
+            id: "USB Audio #1".into(),
+            name: "USB Audio #1".into(),
+            running: Some(Running::Idle),
+        });
+        let procfs = ProcAsound { cards: vec![card] };
+        let kernel = [
+            KernelPcmProbe {
+                card: 2,
+                device: 0,
+                direction: Direction::Playback,
+                result: KernelOutcome::Ok(KernelCaps {
+                    formats: vec![SampleFormat::S32Le],
+                    rates: RateSet::discrete([48_000, 96_000]),
+                    channels: vec![2],
+                    period_frames: Some(FrameRange { min: 16, max: 8192 }),
+                    buffer_frames: None,
+                }),
+            },
+            KernelPcmProbe {
+                card: 2,
+                device: 1,
+                direction: Direction::Playback,
+                result: KernelOutcome::Busy,
+            },
+        ];
+        let snap = run(Some(&procfs), None, Some(&kernel));
+        let d0 = &snap.devices[0];
+        assert_eq!(d0.kernel_probe, Some(KernelProbeStatus::Ok));
+        let rates = d0.capabilities.rates.as_ref().unwrap();
+        assert_eq!(
+            (rates.source, rates.value.clone()),
+            (Source::Kernel, RateSet::discrete([48_000, 96_000]))
+        );
+        assert_eq!(
+            d0.capabilities.period_frames.as_ref().unwrap().value,
+            FrameRange { min: 16, max: 8192 }
+        );
+        assert!(d0.capabilities.buffer_frames.is_none());
+
+        let d1 = &snap.devices[1];
+        assert_eq!(d1.kernel_probe, Some(KernelProbeStatus::Busy));
+        assert!(
+            d1.capabilities.rates.is_none(),
+            "no USB stream for device 1"
+        );
     }
 }

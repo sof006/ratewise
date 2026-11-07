@@ -51,7 +51,9 @@
             2
           ],
           "source": "Procfs"
-        }
+        },
+        "period_frames": null,
+        "buffer_frames": null
       },
       "running": {
         "value": {
@@ -63,7 +65,8 @@
           "buffer_frames": 32768
         },
         "source": "Procfs"
-      }
+      },
+      "kernel_probe": null
     },
     {
       "id": "alsa:HDMI:3:playback",
@@ -81,14 +84,17 @@
       "capabilities": {
         "rates": null,
         "formats": null,
-        "channels": null
+        "channels": null,
+        "period_frames": null,
+        "buffer_frames": null
       },
       "running": {
         "value": {
           "state": "idle"
         },
         "source": "Procfs"
-      }
+      },
+      "kernel_probe": null
     },
     {
       "id": "alsa_output.pci-0000_03_00.1.hdmi-stereo-extra1",
@@ -130,14 +136,17 @@
             2
           ],
           "source": "PipeWire"
-        }
+        },
+        "period_frames": null,
+        "buffer_frames": null
       },
       "running": {
         "value": {
           "state": "idle"
         },
         "source": "Procfs"
-      }
+      },
+      "kernel_probe": null
     },
     {
       "id": "alsa:HDMI:8:playback",
@@ -155,14 +164,17 @@
       "capabilities": {
         "rates": null,
         "formats": null,
-        "channels": null
+        "channels": null,
+        "period_frames": null,
+        "buffer_frames": null
       },
       "running": {
         "value": {
           "state": "idle"
         },
         "source": "Procfs"
-      }
+      },
+      "kernel_probe": null
     },
     {
       "id": "alsa:HDMI:9:playback",
@@ -180,14 +192,17 @@
       "capabilities": {
         "rates": null,
         "formats": null,
-        "channels": null
+        "channels": null,
+        "period_frames": null,
+        "buffer_frames": null
       },
       "running": {
         "value": {
           "state": "idle"
         },
         "source": "Procfs"
-      }
+      },
+      "kernel_probe": null
     },
     {
       "id": "alsa_output.usb-SteelSeries_Arctis_Nova_7-00.analog-stereo",
@@ -229,14 +244,17 @@
             2
           ],
           "source": "Procfs"
-        }
+        },
+        "period_frames": null,
+        "buffer_frames": null
       },
       "running": {
         "value": {
           "state": "idle"
         },
         "source": "Procfs"
-      }
+      },
+      "kernel_probe": null
     },
     {
       "id": "alsa_input.usb-SteelSeries_Arctis_Nova_7-00.mono-fallback",
@@ -278,14 +296,17 @@
             1
           ],
           "source": "Procfs"
-        }
+        },
+        "period_frames": null,
+        "buffer_frames": null
       },
       "running": {
         "value": {
           "state": "idle"
         },
         "source": "Procfs"
-      }
+      },
+      "kernel_probe": null
     }
   ],
   "clock": {
@@ -303,5 +324,23 @@
     "source": "PipeWire"
   },
   "pipewire_version": "1.6.10",
-  "notes": []
+  "stack": {
+    "server": "pipewire",
+    "pipewire_version": "1.6.10",
+    "pipewire_pulse": true,
+    "session_manager": {
+      "name": "wireplumber",
+      "version": "0.5.18",
+      "config": "spa-json-0.5"
+    },
+    "pulseaudio_version": null,
+    "jack_running": false,
+    "systemd_user_session": null
+  },
+  "notes": [
+    {
+      "source": "Kernel",
+      "message": "this fixture has no kernel.json, so there are no direct hardware readings"
+    }
+  ]
 }

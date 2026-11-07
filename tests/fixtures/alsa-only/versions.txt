@@ -5,3 +5,4 @@ os: Debian GNU/Linux 12 (bookworm)
 pipewire: not installed
 wireplumber: not installed
 pactl: not installed
+systemd-user-session: yes

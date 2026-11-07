@@ -4,24 +4,31 @@ Outputs
     rates     unknown
     formats   unknown
     channels  unknown
+    kernel    busy: another program has it open, so the details above come from other sources
     id        alsa:PCH:0:playback
     alsa      hw:CARD=PCH,DEV=0
 
 Inputs
   HDA Intel PCH: ALC892 Analog — built-in
     running   idle  [from /proc/asound]
-    rates     unknown
-    formats   unknown
-    channels  unknown
+    rates     44.1, 48, 96, 192 kHz  [from kernel]
+    formats   S16_LE (16-bit), S32_LE (32-bit)  [from kernel]
+    channels  2  [from kernel]
+    period    32–524288 frames  [from kernel]
+    buffer    64–1048576 frames  [from kernel]
     id        alsa:PCH:0:capture
     alsa      hw:CARD=PCH,DEV=0
   USB PnP Sound Device: USB Audio — USB
     running   idle  [from /proc/asound]
-    rates     8–48 kHz (continuous)  [from /proc/asound]
-    formats   S16_LE (16-bit)  [from /proc/asound]
-    channels  1  [from /proc/asound]
+    rates     8, 11.025, 16, 22.05, 32, 44.1, 48 kHz  [from kernel]
+    formats   S16_LE (16-bit)  [from kernel]
+    channels  1  [from kernel]
+    period    8–24000 frames  [from kernel]
+    buffer    16–48000 frames  [from kernel]
     id        alsa:Device:0:capture
     alsa      hw:CARD=Device,DEV=0
+
+Sound server: ALSA only (no sound server)
 
 Notes
   PipeWire: this fixture has no pw-dump.json, so it simulates a system without PipeWire

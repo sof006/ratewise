@@ -17,7 +17,9 @@
       "capabilities": {
         "rates": null,
         "formats": null,
-        "channels": null
+        "channels": null,
+        "period_frames": null,
+        "buffer_frames": null
       },
       "running": {
         "value": {
@@ -29,6 +31,9 @@
           "buffer_frames": 88200
         },
         "source": "Procfs"
+      },
+      "kernel_probe": {
+        "status": "busy"
       }
     },
     {
@@ -45,15 +50,63 @@
       },
       "pipewire": null,
       "capabilities": {
-        "rates": null,
-        "formats": null,
-        "channels": null
+        "rates": {
+          "value": {
+            "kind": "discrete",
+            "rates": [
+              32000,
+              44100,
+              48000,
+              88200,
+              96000,
+              176400,
+              192000
+            ]
+          },
+          "source": "Kernel"
+        },
+        "formats": {
+          "value": [
+            "S16_LE",
+            "S32_LE"
+          ],
+          "source": "Kernel"
+        },
+        "channels": {
+          "value": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8
+          ],
+          "source": "Kernel"
+        },
+        "period_frames": {
+          "value": {
+            "min": 32,
+            "max": 524288
+          },
+          "source": "Kernel"
+        },
+        "buffer_frames": {
+          "value": {
+            "min": 64,
+            "max": 1048576
+          },
+          "source": "Kernel"
+        }
       },
       "running": {
         "value": {
           "state": "idle"
         },
         "source": "Procfs"
+      },
+      "kernel_probe": {
+        "status": "ok"
       }
     },
     {
@@ -70,20 +123,68 @@
       },
       "pipewire": null,
       "capabilities": {
-        "rates": null,
-        "formats": null,
-        "channels": null
+        "rates": {
+          "value": {
+            "kind": "discrete",
+            "rates": [
+              44100,
+              48000,
+              96000,
+              192000
+            ]
+          },
+          "source": "Kernel"
+        },
+        "formats": {
+          "value": [
+            "S16_LE",
+            "S32_LE"
+          ],
+          "source": "Kernel"
+        },
+        "channels": {
+          "value": [
+            2
+          ],
+          "source": "Kernel"
+        },
+        "period_frames": {
+          "value": {
+            "min": 32,
+            "max": 524288
+          },
+          "source": "Kernel"
+        },
+        "buffer_frames": {
+          "value": {
+            "min": 64,
+            "max": 1048576
+          },
+          "source": "Kernel"
+        }
       },
       "running": {
         "value": {
           "state": "idle"
         },
         "source": "Procfs"
+      },
+      "kernel_probe": {
+        "status": "ok"
       }
     }
   ],
   "clock": null,
   "pipewire_version": null,
+  "stack": {
+    "server": "pulseaudio",
+    "pipewire_version": null,
+    "pipewire_pulse": false,
+    "session_manager": null,
+    "pulseaudio_version": "15.99.1",
+    "jack_running": false,
+    "systemd_user_session": true
+  },
   "notes": [
     {
       "source": "PipeWire",

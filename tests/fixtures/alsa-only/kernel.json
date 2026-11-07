@@ -1,0 +1,76 @@
+[
+  {
+    "card": 0,
+    "device": 0,
+    "direction": "playback",
+    "result": {
+      "status": "busy"
+    }
+  },
+  {
+    "card": 0,
+    "device": 0,
+    "direction": "capture",
+    "result": {
+      "status": "ok",
+      "formats": [
+        "S16_LE",
+        "S32_LE"
+      ],
+      "rates": {
+        "kind": "discrete",
+        "rates": [
+          44100,
+          48000,
+          96000,
+          192000
+        ]
+      },
+      "channels": [
+        2
+      ],
+      "period_frames": {
+        "min": 32,
+        "max": 524288
+      },
+      "buffer_frames": {
+        "min": 64,
+        "max": 1048576
+      }
+    }
+  },
+  {
+    "card": 1,
+    "device": 0,
+    "direction": "capture",
+    "result": {
+      "status": "ok",
+      "formats": [
+        "S16_LE"
+      ],
+      "rates": {
+        "kind": "discrete",
+        "rates": [
+          8000,
+          11025,
+          16000,
+          22050,
+          32000,
+          44100,
+          48000
+        ]
+      },
+      "channels": [
+        1
+      ],
+      "period_frames": {
+        "min": 8,
+        "max": 24000
+      },
+      "buffer_frames": {
+        "min": 16,
+        "max": 48000
+      }
+    }
+  }
+]

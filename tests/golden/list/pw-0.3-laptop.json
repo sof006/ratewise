@@ -41,7 +41,9 @@
             2
           ],
           "source": "PipeWire"
-        }
+        },
+        "period_frames": null,
+        "buffer_frames": null
       },
       "running": {
         "value": {
@@ -53,6 +55,9 @@
           "buffer_frames": 2048
         },
         "source": "Procfs"
+      },
+      "kernel_probe": {
+        "status": "permission_denied"
       }
     },
     {
@@ -71,13 +76,19 @@
       "capabilities": {
         "rates": null,
         "formats": null,
-        "channels": null
+        "channels": null,
+        "period_frames": null,
+        "buffer_frames": null
       },
       "running": {
         "value": {
           "state": "idle"
         },
         "source": "Procfs"
+      },
+      "kernel_probe": {
+        "status": "failed",
+        "message": "couldn't open the device (No such device (os error 19))"
       }
     },
     {
@@ -121,13 +132,18 @@
             2
           ],
           "source": "PipeWire"
-        }
+        },
+        "period_frames": null,
+        "buffer_frames": null
       },
       "running": {
         "value": {
           "state": "idle"
         },
         "source": "Procfs"
+      },
+      "kernel_probe": {
+        "status": "permission_denied"
       }
     }
   ],
@@ -146,5 +162,18 @@
     "source": "PipeWire"
   },
   "pipewire_version": "0.3.48",
+  "stack": {
+    "server": "pipewire",
+    "pipewire_version": "0.3.48",
+    "pipewire_pulse": true,
+    "session_manager": {
+      "name": "wireplumber",
+      "version": "0.4.8",
+      "config": "lua-0.4"
+    },
+    "pulseaudio_version": null,
+    "jack_running": false,
+    "systemd_user_session": true
+  },
   "notes": []
 }

@@ -316,6 +316,31 @@ pub struct Capabilities {
     pub rates: Option<Sourced<RateSet>>,
     pub formats: Option<Sourced<Vec<SampleFormat>>>,
     pub channels: Option<Sourced<Vec<u32>>>,
+    /// Period size the driver accepts, in frames (kernel probe only).
+    pub period_frames: Option<Sourced<FrameRange>>,
+    /// Buffer size the driver accepts, in frames (kernel probe only).
+    pub buffer_frames: Option<Sourced<FrameRange>>,
+}
+
+/// An inclusive range of frame counts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FrameRange {
+    pub min: u32,
+    pub max: u32,
+}
+
+/// How the direct kernel probe went for a device (spec §3.2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum KernelProbeStatus {
+    Ok,
+    /// Another program (usually the sound server) has the device open. This is normal.
+    Busy,
+    /// No permission to open `/dev/snd/*` (not in the `audio` group?).
+    PermissionDenied,
+    Failed {
+        message: String,
+    },
 }
 
 /// Parameters of an open stream on the hardware.
@@ -389,6 +414,8 @@ pub struct Device {
     pub pipewire: Option<PipeWireNode>,
     pub capabilities: Capabilities,
     pub running: Option<Sourced<Running>>,
+    /// `None` when the kernel wasn't probed (no `/dev/snd`, Bluetooth, fixture without data).
+    pub kernel_probe: Option<KernelProbeStatus>,
 }
 
 /// PipeWire's global clock settings (the `settings` metadata).
@@ -417,7 +444,92 @@ pub struct Snapshot {
     pub devices: Vec<Device>,
     pub clock: Option<Sourced<ClockSettings>>,
     pub pipewire_version: Option<String>,
+    pub stack: StackReport,
     pub notes: Vec<ProbeNote>,
+}
+
+/// Which sound server owns audio.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SoundServer {
+    PipeWire,
+    PulseAudio,
+    /// A standalone JACK server (Ratewise shows it read-only).
+    Jack,
+    /// No sound server: programs use ALSA devices directly.
+    Alsa,
+    /// No sound server and no sound cards.
+    None,
+}
+
+/// WirePlumber's config format changed completely between 0.4 (Lua) and 0.5 (SPA-JSON).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WirePlumberConfig {
+    #[serde(rename = "lua-0.4")]
+    Lua04,
+    #[serde(rename = "spa-json-0.5")]
+    SpaJson05,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "name", rename_all = "kebab-case")]
+pub enum SessionManager {
+    #[serde(rename = "wireplumber")]
+    WirePlumber {
+        version: Option<String>,
+        config: Option<WirePlumberConfig>,
+    },
+    PipewireMediaSession,
+}
+
+/// What's running and which versions (spec §3.4).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StackReport {
+    pub server: SoundServer,
+    pub pipewire_version: Option<String>,
+    /// PipeWire's PulseAudio replacement is running.
+    pub pipewire_pulse: bool,
+    pub session_manager: Option<SessionManager>,
+    /// Only for a real PulseAudio daemon (not pipewire-pulse).
+    pub pulseaudio_version: Option<String>,
+    pub jack_running: bool,
+    /// Whether `systemctl --user` can restart services. `None` if unknown.
+    pub systemd_user_session: Option<bool>,
+}
+
+impl StackReport {
+    /// One line for the sidebar pill and the CLI, e.g. "PipeWire 1.6.10 · WirePlumber 0.5.18".
+    pub fn summary(&self) -> String {
+        let with_version = |name: &str, v: &Option<String>| match v {
+            Some(v) => format!("{name} {v}"),
+            None => name.to_string(),
+        };
+        let mut parts = vec![match self.server {
+            SoundServer::PipeWire => with_version("PipeWire", &self.pipewire_version),
+            SoundServer::PulseAudio => with_version("PulseAudio", &self.pulseaudio_version),
+            SoundServer::Jack => "JACK".into(),
+            SoundServer::Alsa => "ALSA only (no sound server)".into(),
+            SoundServer::None => "No sound server".into(),
+        }];
+        if self.server == SoundServer::PipeWire {
+            match &self.session_manager {
+                Some(SessionManager::WirePlumber { version, .. }) => {
+                    parts.push(with_version("WirePlumber", version))
+                }
+                Some(SessionManager::PipewireMediaSession) => {
+                    parts.push("pipewire-media-session".into())
+                }
+                None => parts.push("no session manager".into()),
+            }
+            if self.pipewire_pulse {
+                parts.push("pipewire-pulse".into());
+            }
+        }
+        if self.jack_running && self.server != SoundServer::Jack {
+            parts.push("JACK".into());
+        }
+        parts.join(" · ")
+    }
 }
 
 /// Shown when no devices were found at all (spec §5).

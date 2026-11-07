@@ -6,3 +6,5 @@ pipewire: not installed
 wireplumber: not installed
 pactl: pactl 15.99.1 | Compiled with libpulse 15.99.0 | Linked with libpulse 15.99.0
 pulse-server: pulseaudio
+pulse-server-version: 15.99.1
+systemd-user-session: yes

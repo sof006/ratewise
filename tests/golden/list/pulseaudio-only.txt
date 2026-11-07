@@ -4,24 +4,31 @@ Outputs
     rates     unknown
     formats   unknown
     channels  unknown
+    kernel    busy: another program has it open, so the details above come from other sources
     id        alsa:PCH:0:playback
     alsa      hw:CARD=PCH,DEV=0
   HDA Intel PCH: HDMI 0 — HDMI
     running   idle  [from /proc/asound]
-    rates     unknown
-    formats   unknown
-    channels  unknown
+    rates     32, 44.1, 48, 88.2, 96, 176.4, 192 kHz  [from kernel]
+    formats   S16_LE (16-bit), S32_LE (32-bit)  [from kernel]
+    channels  2, 3, 4, 5, 6, 7, 8  [from kernel]
+    period    32–524288 frames  [from kernel]
+    buffer    64–1048576 frames  [from kernel]
     id        alsa:PCH:3:playback
     alsa      hw:CARD=PCH,DEV=3
 
 Inputs
   HDA Intel PCH: ALC887-VD Analog — built-in
     running   idle  [from /proc/asound]
-    rates     unknown
-    formats   unknown
-    channels  unknown
+    rates     44.1, 48, 96, 192 kHz  [from kernel]
+    formats   S16_LE (16-bit), S32_LE (32-bit)  [from kernel]
+    channels  2  [from kernel]
+    period    32–524288 frames  [from kernel]
+    buffer    64–1048576 frames  [from kernel]
     id        alsa:PCH:0:capture
     alsa      hw:CARD=PCH,DEV=0
+
+Sound server: PulseAudio 15.99.1
 
 Notes
   PipeWire: this fixture has no pw-dump.json, so it simulates a system without PipeWire

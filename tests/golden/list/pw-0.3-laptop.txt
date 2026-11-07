@@ -4,6 +4,7 @@ Outputs
     rates     44.1–192 kHz (continuous)  [from PipeWire]
     formats   S16_LE (16-bit), S32_LE (32-bit)  [from PipeWire]
     channels  2  [from PipeWire]
+    kernel    no permission to open it in /dev/snd. Are you in the `audio` group?
     id        alsa_output.pci-0000_00_1f.3.analog-stereo
     alsa      hw:CARD=PCH,DEV=0
   HDA Intel PCH: HDMI 0 — HDMI
@@ -11,6 +12,7 @@ Outputs
     rates     unknown
     formats   unknown
     channels  unknown
+    kernel    probe failed: couldn't open the device (No such device (os error 19))
     id        alsa:PCH:3:playback
     alsa      hw:CARD=PCH,DEV=3
 
@@ -20,8 +22,10 @@ Inputs
     rates     44.1–192 kHz (continuous)  [from PipeWire]
     formats   S16_LE (16-bit), S32_LE (32-bit)  [from PipeWire]
     channels  1, 2  [from PipeWire]
+    kernel    no permission to open it in /dev/snd. Are you in the `audio` group?
     id        alsa_input.pci-0000_00_1f.3.analog-stereo
     alsa      hw:CARD=PCH,DEV=0
 
-PipeWire 0.3.48 clock: default 48 kHz · allowed 48 kHz · quantum 1024 (max 2048)  [from PipeWire]
+Sound server: PipeWire 0.3.48 · WirePlumber 0.4.8 · pipewire-pulse
+PipeWire clock: default 48 kHz · allowed 48 kHz · quantum 1024 (max 2048)  [from PipeWire]
 
