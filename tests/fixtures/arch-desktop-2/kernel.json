@@ -1,0 +1,204 @@
+[
+  {
+    "card": 0,
+    "device": 0,
+    "direction": "playback",
+    "result": {
+      "status": "busy"
+    }
+  },
+  {
+    "card": 1,
+    "device": 3,
+    "direction": "playback",
+    "result": {
+      "status": "ok",
+      "formats": [
+        "S16_LE",
+        "S32_LE"
+      ],
+      "rates": {
+        "kind": "discrete",
+        "rates": [
+          32000,
+          44100,
+          48000,
+          88200,
+          96000,
+          176400,
+          192000
+        ]
+      },
+      "channels": [
+        2,
+        4,
+        6,
+        8
+      ],
+      "period_frames": {
+        "min": 4,
+        "max": 524288
+      },
+      "buffer_frames": {
+        "min": 8,
+        "max": 1048576
+      }
+    }
+  },
+  {
+    "card": 1,
+    "device": 7,
+    "direction": "playback",
+    "result": {
+      "status": "ok",
+      "formats": [
+        "S16_LE",
+        "S32_LE"
+      ],
+      "rates": {
+        "kind": "discrete",
+        "rates": [
+          32000,
+          44100,
+          48000
+        ]
+      },
+      "channels": [
+        2
+      ],
+      "period_frames": {
+        "min": 16,
+        "max": 524288
+      },
+      "buffer_frames": {
+        "min": 32,
+        "max": 1048576
+      }
+    }
+  },
+  {
+    "card": 1,
+    "device": 8,
+    "direction": "playback",
+    "result": {
+      "status": "ok",
+      "formats": [
+        "S16_LE",
+        "S32_LE"
+      ],
+      "rates": {
+        "kind": "discrete",
+        "rates": [
+          32000,
+          44100,
+          48000
+        ]
+      },
+      "channels": [
+        2
+      ],
+      "period_frames": {
+        "min": 16,
+        "max": 524288
+      },
+      "buffer_frames": {
+        "min": 32,
+        "max": 1048576
+      }
+    }
+  },
+  {
+    "card": 1,
+    "device": 9,
+    "direction": "playback",
+    "result": {
+      "status": "ok",
+      "formats": [
+        "S16_LE",
+        "S32_LE"
+      ],
+      "rates": {
+        "kind": "discrete",
+        "rates": [
+          32000,
+          44100,
+          48000,
+          88200,
+          96000,
+          176400,
+          192000
+        ]
+      },
+      "channels": [
+        2,
+        4,
+        6,
+        8
+      ],
+      "period_frames": {
+        "min": 4,
+        "max": 524288
+      },
+      "buffer_frames": {
+        "min": 8,
+        "max": 1048576
+      }
+    }
+  },
+  {
+    "card": 2,
+    "device": 0,
+    "direction": "capture",
+    "result": {
+      "status": "ok",
+      "formats": [
+        "S16_LE"
+      ],
+      "rates": {
+        "kind": "discrete",
+        "rates": [
+          48000
+        ]
+      },
+      "channels": [
+        1
+      ],
+      "period_frames": {
+        "min": 48,
+        "max": 48000
+      },
+      "buffer_frames": {
+        "min": 96,
+        "max": 96000
+      }
+    }
+  },
+  {
+    "card": 2,
+    "device": 0,
+    "direction": "playback",
+    "result": {
+      "status": "ok",
+      "formats": [
+        "S24_3LE"
+      ],
+      "rates": {
+        "kind": "discrete",
+        "rates": [
+          48000
+        ]
+      },
+      "channels": [
+        2
+      ],
+      "period_frames": {
+        "min": 48,
+        "max": 48000
+      },
+      "buffer_frames": {
+        "min": 96,
+        "max": 96000
+      }
+    }
+  }
+]

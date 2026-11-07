@@ -1,0 +1,22 @@
+Sound Driver:3.8.1a-980706 (ALSA emulation code)
+Kernel: Linux REDACTED 7.3.1-1-cachyos #1 SMP PREEMPT_DYNAMIC Sat, 31 Oct 2026 06:43:52 +0000 x86_64
+Config options: 0
+
+Installed drivers: 
+Type 10: ALSA emulation
+
+Card config: 
+Topping E30 II Lite at usb-0000:0e:00.4-2, high speed
+HDA ATI HDMI at 0xf6ba0000 irq 133
+SteelSeries Arctis Nova 7 at usb-0000:0b:00.0-9, full speed
+
+Audio devices: NOT ENABLED IN CONFIG
+
+Synth devices: NOT ENABLED IN CONFIG
+
+Midi devices: NOT ENABLED IN CONFIG
+
+Timers:
+31: system timer
+
+Mixers: NOT ENABLED IN CONFIG

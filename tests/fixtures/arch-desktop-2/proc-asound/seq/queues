@@ -1,0 +1,13 @@
+queue 1: [Queue-1]
+owned by client    : 145
+lock status        : Locked
+queued time events : 0
+queued tick events : 0
+timer state        : Stopped
+timer PPQ          : 96
+current tempo      : 500000
+tempo base         : 1000 ns
+current BPM        : 120
+current time       : 0.000000000 s
+current tick       : 0
+
