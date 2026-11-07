@@ -23,7 +23,7 @@ declare -A setup=(
     [debian:11]=$apt
     [debian:12]=$apt
     [fedora:latest]='dnf install -y -q xorg-x11-server-Xvfb xvfb-run xorg-x11-xauth >/dev/null'
-    [opensuse/tumbleweed]='zypper -nq in xvfb-run >/dev/null'
+    [opensuse/tumbleweed]='zypper -nq in xvfb-run gawk >/dev/null'
     [archlinux:latest]='pacman -Sy --noconfirm --quiet xorg-server-xvfb xorg-xauth >/dev/null'
 )
 all=(ubuntu:20.04 ubuntu:22.04 ubuntu:24.04 debian:11 debian:12 fedora:latest opensuse/tumbleweed archlinux:latest wayland)

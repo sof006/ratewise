@@ -56,6 +56,10 @@ install -m 644 packaging/ratewise.png "$app/usr/share/icons/hicolor/256x256/apps
 install -m 644 packaging/ratewise.svg "$app/usr/share/icons/hicolor/scalable/apps/ratewise.svg"
 ln -s ratewise.png "$app/.DirIcon"
 
+# For hosts with no fonts: AppRun points fontconfig at these (see AppRun).
+mkdir -p "$app/usr/share/ratewise/fonts"
+install -m 644 assets/fonts/Inter-*.ttf "$app/usr/share/ratewise/fonts/"
+
 lic=$app/usr/share/licenses/ratewise
 install -m 644 LICENSE "$lic/LICENSE"
 install -m 644 assets/fonts/Inter-LICENSE.txt "$lic/Inter-LICENSE.txt"

@@ -1,16 +1,31 @@
 #!/bin/sh
 # Ratewise AppImage entry point.
 #
-# The AppImage carries fallback copies of the window's libraries (built against
-# glibc 2.28). A copy is used only when the host lacks that library: a desktop's
-# own X11/Wayland libraries match its GPU driver, and mixing old and new copies is
-# what usually breaks AppImages. RATEWISE_LIBS_DEBUG=1 prints which copies are used.
-# RATEWISE_LIBS=bundled uses every bundled copy and
-# RATEWISE_LIBS=host none, for troubleshooting.
+# Libraries: the AppImage carries fallback copies of the window's libraries (built
+# against glibc 2.28). A copy is used only when the host lacks that library: a
+# desktop's own X11/Wayland libraries match its GPU driver, and mixing old and new
+# copies is what usually breaks AppImages.
+#
+# Fonts: Slint's font code panics when fontconfig finds no fonts at all, as on
+# minimal systems. Then a fontconfig file is generated that adds the bundled Inter
+# to whatever the host has.
+#
+# Troubleshooting: RATEWISE_LIBS=bundled|host forces every bundled library or none,
+# RATEWISE_FONTS=bundled forces the generated font setup, and RATEWISE_LIBS_DEBUG=1
+# prints what was chosen. Anything generated goes in a temporary folder that's
+# removed on exit.
 
 here=$(dirname "$(readlink -f "$0")")
 bin=$here/usr/bin/ratewise
 fallback=$here/usr/lib/ratewise
+
+scratch=
+make_scratch() {
+    [ -n "$scratch" ] && return 0
+    scratch=$(mktemp -d "${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/ratewise.XXXXXX" 2>/dev/null ||
+        mktemp -d 2>/dev/null) || scratch=
+    [ -n "$scratch" ]
+}
 
 host_has() {
     # For tests: pretend these are missing on the host.
@@ -27,9 +42,10 @@ host_has() {
     return 1
 }
 
+# ---- libraries
 mode=${RATEWISE_LIBS:-auto}
 libs=
-cleanup=
+missing=
 case $mode in
     host) ;;
     bundled)
@@ -37,7 +53,6 @@ case $mode in
         missing=" (all)"
         ;;
     *)
-        missing=
         for f in "$fallback"/*.so*; do
             [ -e "$f" ] || continue
             n=$(basename "$f")
@@ -57,32 +72,64 @@ case $mode in
             done
         done
         if [ -n "$missing" ]; then
-            # A folder of links to just the missing ones, removed on exit.
-            tmp=$(mktemp -d "${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/ratewise-libs.XXXXXX" 2>/dev/null ||
-                mktemp -d 2>/dev/null)
-            if [ -n "$tmp" ]; then
-                for n in $missing; do ln -s "$fallback/$n" "$tmp/$n"; done
-                libs=$tmp
-                cleanup=$tmp
+            if make_scratch; then
+                # Links to just the missing ones.
+                mkdir "$scratch/lib"
+                for n in $missing; do ln -s "$fallback/$n" "$scratch/lib/$n"; done
+                libs=$scratch/lib
             else
                 libs=$fallback
             fi
         fi
         ;;
 esac
-
-if [ -n "${RATEWISE_LIBS_DEBUG:-}" ]; then
-    echo "ratewise AppRun: mode $mode, bundled copies used:${missing:- none}" >&2
-fi
 if [ -n "$libs" ]; then
     LD_LIBRARY_PATH=$libs${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
     export LD_LIBRARY_PATH
 fi
 
-if [ -z "$cleanup" ]; then
+# ---- fonts
+host_fonts() {
+    [ -e /etc/fonts/fonts.conf ] || return 1
+    if command -v fc-list >/dev/null 2>&1; then
+        [ -n "$(fc-list 2>/dev/null | head -n 1)" ]
+        return
+    fi
+    for d in /usr/share/fonts /usr/local/share/fonts "${XDG_DATA_HOME:-$HOME/.local/share}/fonts" "$HOME/.fonts"; do
+        [ -d "$d" ] || continue
+        [ -n "$(find "$d" -type f \( -name '*.ttf' -o -name '*.otf' -o -name '*.ttc' -o -name '*.pcf*' \) 2>/dev/null | head -n 1)" ] && return 0
+    done
+    return 1
+}
+fonts=host
+if [ -z "${FONTCONFIG_FILE:-}" ] && { [ "${RATEWISE_FONTS:-}" = bundled ] || ! host_fonts; }; then
+    if make_scratch; then
+        # Absolute paths: older fontconfig (such as the bundled 2.13) doesn't know
+        # prefix="relative". No cachedir, so nothing is written.
+        cat >"$scratch/fonts.conf" <<EOF
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+<fontconfig>
+  <include ignore_missing="yes">/etc/fonts/fonts.conf</include>
+  <dir>$here/usr/share/ratewise/fonts</dir>
+  <dir>/usr/share/fonts</dir>
+  <dir>/usr/local/share/fonts</dir>
+</fontconfig>
+EOF
+        FONTCONFIG_FILE=$scratch/fonts.conf
+        export FONTCONFIG_FILE
+        fonts=bundled
+    fi
+fi
+
+if [ -n "${RATEWISE_LIBS_DEBUG:-}" ]; then
+    echo "ratewise AppRun: libraries $mode, bundled copies used:${missing:- none}; fonts: $fonts" >&2
+fi
+
+if [ -z "$scratch" ]; then
     exec "$bin" "$@"
 fi
-trap 'rm -rf "$cleanup"' EXIT
+trap 'rm -rf "$scratch"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 "$bin" "$@"
