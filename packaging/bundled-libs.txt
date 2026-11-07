@@ -1,0 +1,31 @@
+# Libraries bundled in the AppImage, from Debian 10 (glibc 2.28).
+#
+# The binary links libfontconfig; winit and Slint dlopen the X11, xkbcommon and
+# Wayland ones (ldd doesn't show those). AppRun uses a bundled copy only when the
+# host doesn't have that library, so a desktop's own libraries, which its GPU driver
+# was built against, always win. The GPU stack (libGL, libEGL, …) always comes from
+# the host.
+libfontconfig.so.1
+libfreetype.so.6
+libexpat.so.1
+libpng16.so.16
+libz.so.1
+libX11.so.6
+libX11-xcb.so.1
+libxcb.so.1
+libxcb-xkb.so.1
+libXau.so.6
+libXdmcp.so.6
+libbsd.so.0
+libXcursor.so.1
+libXrender.so.1
+libXfixes.so.3
+libXi.so.6
+libXext.so.6
+libxkbcommon.so.0
+libxkbcommon-x11.so.0
+libwayland-client.so.0
+libwayland-cursor.so.0
+libwayland-egl.so.1
+libffi.so.6
+libuuid.so.1

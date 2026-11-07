@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.sof006.ratewise</id>
+  <name>Ratewise</name>
+  <summary>View and set sound card sample rates, formats and buffer sizes</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <developer id="io.github.sof006">
+    <name>sof006</name>
+  </developer>
+  <description>
+    <p>
+      Ratewise shows what each sound card is running at right now (sample rate, format
+      and buffer size) and what it supports, and changes those settings for PipeWire,
+      WirePlumber, PulseAudio or plain ALSA.
+    </p>
+    <p>
+      Every change is shown as a plan with file diffs before it is applied, is backed up
+      first, and can be reverted. It only writes your own config files and never needs
+      root.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.sof006.ratewise.desktop</launchable>
+  <url type="homepage">https://github.com/sof006/ratewise</url>
+  <categories>
+    <category>AudioVideo</category>
+    <category>Audio</category>
+    <category>Mixer</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-11-07">
+      <description>
+        <p>First release: device list, per-device and global settings, review and revert.</p>
+      </description>
+    </release>
+  </releases>
+</component>

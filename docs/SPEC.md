@@ -168,12 +168,13 @@ The toolkit is **Slint**, using its own renderer.
   - **Allowed from host:** glibc family (`libc`, `libm`, `libdl`, `libpthread`, `librt`, `ld-linux*`), `libgcc_s`, GPU driver stack (`libGL`, `libEGL`, `libGLX`, `libGLdispatch`, `libvulkan`, `libdrm`, `libgbm`).
   - **Bundled:** everything else, typically `libxkbcommon`, `libxkbcommon-x11`, `libxcb*`, `libX11*`, `libXcursor`, `libXi`, `libXrandr`, `libwayland-client`, `libwayland-cursor`, `libwayland-egl`, plus `libfontconfig`/`libfreetype` if Slint pulls them in.
   - Pay attention to libraries Slint/winit **dlopen** at runtime. `ldd` won't show them, so bundle them explicitly and point the loader at them from `AppRun`.
+  - **As built:** the bundled copies come from Debian 10 (glibc 2.28), fetched by `packaging/fetch-libs.sh` and listed in `packaging/bundled-libs.txt`. A distro's own copies need newer glibc (Ubuntu 24.04's need 2.38), so they can't be used. `AppRun` uses a bundled copy **only when the host lacks that library**. A desktop's own X11/xcb/Wayland libraries are the ones its GPU driver (from the host) was built against, and forcing older copies under a newer Mesa is the usual way AppImages break. Minimal systems that lack them still get the bundled ones. `RATEWISE_LIBS=bundled` forces every bundled copy and `RATEWISE_LIBS=host` none, for troubleshooting.
 - Include a `.desktop` file, an icon (SVG + 256 px PNG), and AppStream metainfo.
 - **Audit script** (`packaging/audit.sh`, run in CI): extract the AppImage, then run `ldd` on every ELF inside and fail if any dependency is unresolved or resolves to a host library outside the allowlist.
 
 ### 6.3 Runtime resilience (in the app)
 - **Renderer fallback:** try the GPU renderer, and if context creation fails, switch automatically to Slint's software renderer. Allow forcing it with `RATEWISE_RENDERER=software`.
-- **Backend fallback:** Wayland → X11. If there's no display at all, print a clear message suggesting the CLI and exit non-zero.
+- **Backend fallback:** Wayland → X11. If there's no display at all, print a clear message suggesting the CLI and exit non-zero. winit doesn't fall back by itself, so when the window fails with both `WAYLAND_DISPLAY` and `DISPLAY` set, Ratewise reruns itself without `WAYLAND_DISPLAY`. (Slint always uses X11 under WSL, so test Wayland on real Linux or with the WSL markers hidden.)
 - Install a **panic handler** that writes a log to `~/.local/state/ratewise/crash-<ts>.log`. If a display is available, it also shows a minimal error window (or a `zenity`/`kdialog` popup if one is present).
 - Every probe and backend failure is non-fatal. The app must start and render with: no PipeWire, no PulseAudio, no `/dev/snd` access, no `pw-*` tools, a read-only home directory, or a missing `XDG_RUNTIME_DIR`.
 

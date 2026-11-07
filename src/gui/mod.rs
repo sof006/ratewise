@@ -34,6 +34,9 @@ pub struct Options {
     pub self_test: bool,
 }
 
+/// Set in the child process that retries over X11 after Wayland failed.
+const X11_RETRY: &str = "RATEWISE_X11_RETRY";
+
 /// How often "Running now" refreshes. Light refreshes don't open devices.
 const POLL: Duration = Duration::from_secs(3);
 
@@ -118,12 +121,30 @@ pub fn run(opts: Options) -> anyhow::Result<()> {
             .map_err(|e| anyhow::anyhow!("Couldn't start the software renderer: {e}."))?;
     }
     crate::crash::set_gui(true);
-    let w = AppWindow::new().map_err(|e| {
-        anyhow::anyhow!(
-            "Couldn't open a window: {e}. The command line works without one: try \
-             `ratewise list` or `ratewise --help`."
-        )
-    })?;
+    let w = match AppWindow::new() {
+        Ok(w) => w,
+        Err(e) => {
+            // winit picks Wayland whenever WAYLAND_DISPLAY is set and doesn't fall back
+            // if that fails, so try X11 (XWayland) in a fresh process (spec §6.3).
+            if var("DISPLAY").is_some()
+                && var("WAYLAND_DISPLAY").is_some()
+                && var(X11_RETRY).is_none()
+            {
+                tracing::warn!("Wayland failed ({e}); trying X11");
+                let status = std::process::Command::new(std::env::current_exe()?)
+                    .args(std::env::args_os().skip(1))
+                    // Without WAYLAND_DISPLAY, winit uses X11.
+                    .env_remove("WAYLAND_DISPLAY")
+                    .env(X11_RETRY, "1")
+                    .status()?;
+                std::process::exit(status.code().unwrap_or(1));
+            }
+            bail!(
+                "Couldn't open a window: {e}. The command line works without one: try \
+                 `ratewise list` or `ratewise --help`."
+            )
+        }
+    };
 
     let (tx, rx) = mpsc::channel();
     let nav = Rc::new(VecModel::default());

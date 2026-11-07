@@ -6,8 +6,9 @@ fn main() -> anyhow::Result<()> {
     // `RATEWISE_LOG=debug` enables verbose output; logs go to stderr so `--json` stays clean.
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::try_from_env("RATEWISE_LOG")
-                .unwrap_or_else(|_| EnvFilter::new("warn,arboard=error,winit=error")),
+            EnvFilter::try_from_env("RATEWISE_LOG").unwrap_or_else(|_| {
+                EnvFilter::new("warn,arboard=error,winit=error,sctk_adwaita=off")
+            }),
         )
         .with_writer(std::io::stderr)
         .init();

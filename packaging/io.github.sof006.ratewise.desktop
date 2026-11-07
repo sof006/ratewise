@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Ratewise
+GenericName=Sound Card Settings
+Comment=View and set sample rates, formats and buffer sizes
+Exec=ratewise
+Icon=ratewise
+Terminal=false
+Categories=AudioVideo;Audio;Mixer;
+Keywords=sample rate;bit depth;PipeWire;WirePlumber;PulseAudio;ALSA;latency;buffer;quantum;DAC;

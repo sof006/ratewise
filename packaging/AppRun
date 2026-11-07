@@ -1,0 +1,66 @@
+#!/bin/sh
+# Ratewise AppImage entry point.
+#
+# The AppImage carries fallback copies of the window's libraries (built against
+# glibc 2.28). A copy is used only when the host lacks that library: a desktop's
+# own X11/Wayland libraries match its GPU driver, and mixing old and new copies is
+# what usually breaks AppImages. RATEWISE_LIBS=bundled uses every bundled copy and
+# RATEWISE_LIBS=host none, for troubleshooting.
+
+here=$(dirname "$(readlink -f "$0")")
+bin=$here/usr/bin/ratewise
+fallback=$here/usr/lib/ratewise
+
+host_has() {
+    for d in /lib64 /usr/lib64 /lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu /usr/lib /lib; do
+        [ -e "$d/$1" ] && return 0
+    done
+    for ldc in ldconfig /sbin/ldconfig /usr/sbin/ldconfig; do
+        if "$ldc" -p >/dev/null 2>&1; then
+            "$ldc" -p 2>/dev/null | grep -q "[[:space:]]$1 " && return 0
+            return 1
+        fi
+    done
+    return 1
+}
+
+mode=${RATEWISE_LIBS:-auto}
+libs=
+cleanup=
+case $mode in
+    host) ;;
+    bundled) libs=$fallback ;;
+    *)
+        missing=
+        for f in "$fallback"/*.so*; do
+            [ -e "$f" ] || continue
+            n=$(basename "$f")
+            host_has "$n" || missing="$missing $n"
+        done
+        if [ -n "$missing" ]; then
+            # A folder of links to just the missing ones, removed on exit.
+            tmp=$(mktemp -d "${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/ratewise-libs.XXXXXX" 2>/dev/null ||
+                mktemp -d 2>/dev/null)
+            if [ -n "$tmp" ]; then
+                for n in $missing; do ln -s "$fallback/$n" "$tmp/$n"; done
+                libs=$tmp
+                cleanup=$tmp
+            else
+                libs=$fallback
+            fi
+        fi
+        ;;
+esac
+
+if [ -n "$libs" ]; then
+    LD_LIBRARY_PATH=$libs${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+    export LD_LIBRARY_PATH
+fi
+
+if [ -z "$cleanup" ]; then
+    exec "$bin" "$@"
+fi
+trap 'rm -rf "$cleanup"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+"$bin" "$@"
