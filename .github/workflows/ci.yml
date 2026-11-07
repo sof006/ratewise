@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  ZIG_VERSION: 0.14.1
+
+jobs:
+  check:
+    name: fmt, clippy, tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: System packages
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends \
+            libfontconfig1-dev libfreetype-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev libx11-dev libx11-xcb-dev libxcursor-dev libxi-dev \
+            libgl1-mesa-dev libegl1-mesa-dev xvfb xauth
+      - name: Rust
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - name: clippy without the GUI
+        run: cargo clippy --all-targets --locked --no-default-features -- -D warnings
+      - name: Tests (the GUI smoke test runs under Xvfb)
+        run: cargo test --locked
+
+  appimage:
+    name: AppImage
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: System packages
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends \
+            libfontconfig1-dev libfreetype-dev file desktop-file-utils xvfb xauth
+      - name: Rust
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: zigbuild
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-zigbuild
+      - name: Pinned packaging inputs
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ratewise-tools
+          key: ratewise-tools-${{ hashFiles('packaging/versions.env', 'packaging/fetch-libs.sh') }}
+      - name: Desktop file
+        run: desktop-file-validate packaging/io.github.sof006.ratewise.desktop
+      - name: Build
+        run: packaging/build-appimage.sh
+      - name: Audit
+        run: packaging/audit.sh dist/Ratewise-x86_64.AppImage
+      - name: Self-test on the runner
+        run: xvfb-run -a dist/Ratewise-x86_64.AppImage --appimage-extract-and-run --self-test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Ratewise-x86_64.AppImage
+          path: |
+            dist/Ratewise-x86_64.AppImage
+            dist/Ratewise-x86_64.AppImage.sha256
+          if-no-files-found: error
+
+  launch:
+    name: launch ${{ matrix.image }}
+    needs: appimage
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - ubuntu:20.04
+          - ubuntu:22.04
+          - ubuntu:24.04
+          - debian:11
+          - debian:12
+          - fedora:latest
+          - opensuse/tumbleweed
+          - archlinux:latest
+          - wayland
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Ratewise-x86_64.AppImage
+          path: dist
+      - run: chmod +x dist/Ratewise-x86_64.AppImage
+      - run: packaging/test-launch.sh dist/Ratewise-x86_64.AppImage "${{ matrix.image }}"
