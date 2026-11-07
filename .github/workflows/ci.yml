@@ -74,7 +74,9 @@ jobs:
       - name: Audit
         run: packaging/audit.sh dist/Ratewise-x86_64.AppImage
       - name: Self-test on the runner
-        run: xvfb-run -a dist/Ratewise-x86_64.AppImage --appimage-extract-and-run --self-test
+        run: RATEWISE_LIBS_DEBUG=1 xvfb-run -a dist/Ratewise-x86_64.AppImage --appimage-extract-and-run --self-test
+      - name: Bundled and host libraries mixed
+        run: packaging/test-mixed.sh dist/Ratewise-x86_64.AppImage
       - uses: actions/upload-artifact@v4
         with:
           name: Ratewise-x86_64.AppImage
