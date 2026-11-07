@@ -2,3 +2,4 @@
 /dist
 *.AppImage
 squashfs-root/
+/CLAUDE.md
