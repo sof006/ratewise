@@ -1,0 +1,115 @@
+[
+  {
+    "id": 0,
+    "type": "PipeWire:Interface:Core",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "user-name": "REDACTED",
+      "host-name": "REDACTED",
+      "version": "0.3.48",
+      "name": "pipewire-0",
+      "props": { "core.name": "pipewire-0" }
+    }
+  },
+  {
+    "id": 30,
+    "type": "PipeWire:Interface:Metadata",
+    "version": 3,
+    "props": { "metadata.name": "settings" },
+    "metadata": [
+      { "subject": 0, "key": "log.level", "type": "", "value": "2" },
+      { "subject": 0, "key": "clock.rate", "type": "", "value": "48000" },
+      { "subject": 0, "key": "clock.allowed-rates", "type": "", "value": "[ 48000 ]" },
+      { "subject": 0, "key": "clock.quantum", "type": "", "value": "1024" },
+      { "subject": 0, "key": "clock.max-quantum", "type": "", "value": "2048" },
+      { "subject": 0, "key": "clock.force-quantum", "type": "", "value": "0" },
+      { "subject": 0, "key": "clock.force-rate", "type": "", "value": "0" }
+    ]
+  },
+  {
+    "id": 31,
+    "type": "PipeWire:Interface:Metadata",
+    "version": 3,
+    "props": { "metadata.name": "default" },
+    "metadata": [
+      { "subject": 0, "key": "default.audio.sink", "type": "Spa:String:JSON", "value": "{\"name\":\"alsa_output.pci-0000_00_1f.3.analog-stereo\"}" },
+      { "subject": 0, "key": "default.audio.source", "type": "Spa:String:JSON", "value": "{\"name\":\"alsa_input.pci-0000_00_1f.3.analog-stereo\"}" }
+    ]
+  },
+  {
+    "id": 42,
+    "type": "PipeWire:Interface:Device",
+    "version": 3,
+    "info": {
+      "props": {
+        "api.alsa.card": "0",
+        "device.api": "alsa",
+        "device.bus": "pci",
+        "device.description": "Built-in Audio",
+        "device.name": "alsa_card.pci-0000_00_1f.3"
+      }
+    }
+  },
+  {
+    "id": 50,
+    "type": "PipeWire:Interface:Node",
+    "version": 3,
+    "info": {
+      "state": "running",
+      "props": {
+        "alsa.card": "0",
+        "alsa.device": "0",
+        "api.alsa.path": "front:0",
+        "device.api": "alsa",
+        "device.id": "42",
+        "device.profile.name": "analog-stereo",
+        "media.class": "Audio/Sink",
+        "node.description": "Built-in Audio Analog Stereo",
+        "node.name": "alsa_output.pci-0000_00_1f.3.analog-stereo"
+      },
+      "params": {
+        "EnumFormat": [
+          {
+            "mediaType": "audio",
+            "mediaSubtype": "raw",
+            "format": { "default": "S16LE", "alt1": "S16LE", "alt2": "S32LE" },
+            "rate": { "default": 48000, "min": 44100, "max": 192000 },
+            "channels": 2
+          }
+        ],
+        "Format": [
+          { "mediaType": "audio", "mediaSubtype": "raw", "format": "S16LE", "rate": 48000, "channels": 2 }
+        ]
+      }
+    }
+  },
+  {
+    "id": 51,
+    "type": "PipeWire:Interface:Node",
+    "version": 3,
+    "info": {
+      "state": "suspended",
+      "props": {
+        "alsa.card": "0",
+        "alsa.device": "0",
+        "device.api": "alsa",
+        "device.id": "42",
+        "media.class": "Audio/Source",
+        "node.description": "Built-in Audio Analog Stereo",
+        "node.name": "alsa_input.pci-0000_00_1f.3.analog-stereo"
+      },
+      "params": {
+        "EnumFormat": [
+          {
+            "mediaType": "audio",
+            "mediaSubtype": "raw",
+            "format": { "default": "S16LE", "alt1": "S16LE", "alt2": "S32LE" },
+            "rate": { "default": 48000, "min": 44100, "max": 192000 },
+            "channels": { "default": 2, "min": 1, "max": 2 }
+          }
+        ]
+      }
+    }
+  }
+]

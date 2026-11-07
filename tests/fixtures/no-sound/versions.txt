@@ -1,0 +1,7 @@
+# Hand-written by Claude for development: a minimal container with no sound at all.
+synthetic: true
+kernel: 6.6.87.2-microsoft-standard-WSL2
+os: Ubuntu 24.04.5 LTS
+pipewire: not installed
+wireplumber: not installed
+pactl: not installed

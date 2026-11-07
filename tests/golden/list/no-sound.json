@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "devices": [],
+  "clock": null,
+  "pipewire_version": null,
+  "notes": [
+    {
+      "source": "Procfs",
+      "message": "tests/fixtures/no-sound/proc-asound doesn't exist, so the kernel isn't showing any ALSA sound cards. This is normal inside containers and WSL. On a desktop it means the sound drivers aren't loaded."
+    },
+    {
+      "source": "PipeWire",
+      "message": "this fixture has no pw-dump.json, so it simulates a system without PipeWire"
+    }
+  ]
+}

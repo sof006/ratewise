@@ -1,0 +1,27 @@
+Outputs
+  HDA Intel PCH: ALC887-VD Analog — built-in
+    running   44.1 kHz · 16-bit (S16_LE) · 2 ch · period 22050 (500.0 ms) · buffer 88200 (2000.0 ms)  [from /proc/asound]
+    rates     unknown
+    formats   unknown
+    channels  unknown
+    id        alsa:PCH:0:playback
+    alsa      hw:CARD=PCH,DEV=0
+  HDA Intel PCH: HDMI 0 — HDMI
+    running   idle  [from /proc/asound]
+    rates     unknown
+    formats   unknown
+    channels  unknown
+    id        alsa:PCH:3:playback
+    alsa      hw:CARD=PCH,DEV=3
+
+Inputs
+  HDA Intel PCH: ALC887-VD Analog — built-in
+    running   idle  [from /proc/asound]
+    rates     unknown
+    formats   unknown
+    channels  unknown
+    id        alsa:PCH:0:capture
+    alsa      hw:CARD=PCH,DEV=0
+
+Notes
+  PipeWire: this fixture has no pw-dump.json, so it simulates a system without PipeWire

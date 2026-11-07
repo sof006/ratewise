@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "devices": [
+    {
+      "id": "alsa:PCH:0:playback",
+      "description": "HDA Intel PCH: ALC892 Analog",
+      "direction": "playback",
+      "kind": "builtin",
+      "alsa": {
+        "card": 0,
+        "card_id": "PCH",
+        "device": 0,
+        "card_driver": "HDA-Intel",
+        "pcm_name": "ALC892 Analog"
+      },
+      "pipewire": null,
+      "capabilities": {
+        "rates": null,
+        "formats": null,
+        "channels": null
+      },
+      "running": {
+        "value": {
+          "state": "active",
+          "rate": 44100,
+          "format": "S16_LE",
+          "channels": 2,
+          "period_frames": 1024,
+          "buffer_frames": 4096
+        },
+        "source": "Procfs"
+      }
+    },
+    {
+      "id": "alsa:PCH:0:capture",
+      "description": "HDA Intel PCH: ALC892 Analog",
+      "direction": "capture",
+      "kind": "builtin",
+      "alsa": {
+        "card": 0,
+        "card_id": "PCH",
+        "device": 0,
+        "card_driver": "HDA-Intel",
+        "pcm_name": "ALC892 Analog"
+      },
+      "pipewire": null,
+      "capabilities": {
+        "rates": null,
+        "formats": null,
+        "channels": null
+      },
+      "running": {
+        "value": {
+          "state": "idle"
+        },
+        "source": "Procfs"
+      }
+    },
+    {
+      "id": "alsa:Device:0:capture",
+      "description": "USB PnP Sound Device: USB Audio",
+      "direction": "capture",
+      "kind": "usb",
+      "alsa": {
+        "card": 1,
+        "card_id": "Device",
+        "device": 0,
+        "card_driver": "USB-Audio",
+        "pcm_name": "USB Audio"
+      },
+      "pipewire": null,
+      "capabilities": {
+        "rates": {
+          "value": {
+            "kind": "range",
+            "min": 8000,
+            "max": 48000
+          },
+          "source": "Procfs"
+        },
+        "formats": {
+          "value": [
+            "S16_LE"
+          ],
+          "source": "Procfs"
+        },
+        "channels": {
+          "value": [
+            1
+          ],
+          "source": "Procfs"
+        }
+      },
+      "running": {
+        "value": {
+          "state": "idle"
+        },
+        "source": "Procfs"
+      }
+    }
+  ],
+  "clock": null,
+  "pipewire_version": null,
+  "notes": [
+    {
+      "source": "PipeWire",
+      "message": "this fixture has no pw-dump.json, so it simulates a system without PipeWire"
+    }
+  ]
+}

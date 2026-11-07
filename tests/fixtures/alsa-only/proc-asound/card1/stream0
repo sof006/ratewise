@@ -1,0 +1,11 @@
+C-Media Electronics Inc. USB PnP Sound Device at usb-0000:00:14.0-2, full speed : USB Audio
+
+Capture:
+  Status: Stop
+  Interface 1
+    Altset 1
+    Format: S16_LE
+    Channels: 1
+    Endpoint: 0x82 (2 IN) (ADAPTIVE)
+    Rates: 8000 - 48000 (continuous)
+    Bits: 16

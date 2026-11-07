@@ -1,0 +1,8 @@
+# Hand-written by Claude for development. Replace with a real `ratewise capture-fixture`.
+synthetic: true
+kernel: 6.11.5-arch1-1
+os: Arch Linux
+pipewire: pipewire | Compiled with libpipewire 1.2.7 | Linked with libpipewire 1.2.7
+wireplumber: wireplumber | Compiled with libwireplumber 0.5.6 | Linked with libwireplumber 0.5.6
+pactl: pactl 17.0 | Compiled with libpulse 17.0.0 | Linked with libpulse 17.0.0
+pulse-server: PulseAudio (on PipeWire 1.2.7)

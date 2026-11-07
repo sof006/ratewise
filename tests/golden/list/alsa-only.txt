@@ -1,0 +1,27 @@
+Outputs
+  HDA Intel PCH: ALC892 Analog — built-in
+    running   44.1 kHz · 16-bit (S16_LE) · 2 ch · period 1024 (23.2 ms) · buffer 4096 (92.9 ms)  [from /proc/asound]
+    rates     unknown
+    formats   unknown
+    channels  unknown
+    id        alsa:PCH:0:playback
+    alsa      hw:CARD=PCH,DEV=0
+
+Inputs
+  HDA Intel PCH: ALC892 Analog — built-in
+    running   idle  [from /proc/asound]
+    rates     unknown
+    formats   unknown
+    channels  unknown
+    id        alsa:PCH:0:capture
+    alsa      hw:CARD=PCH,DEV=0
+  USB PnP Sound Device: USB Audio — USB
+    running   idle  [from /proc/asound]
+    rates     8–48 kHz (continuous)  [from /proc/asound]
+    formats   S16_LE (16-bit)  [from /proc/asound]
+    channels  1  [from /proc/asound]
+    id        alsa:Device:0:capture
+    alsa      hw:CARD=Device,DEV=0
+
+Notes
+  PipeWire: this fixture has no pw-dump.json, so it simulates a system without PipeWire

@@ -1,0 +1,35 @@
+Topping D50s at usb-0000:00:14.0-3, high speed : USB Audio
+
+Playback:
+  Status: Running
+    Interface = 1
+    Altset = 2
+    Packet Size = 104
+    Momentary freq = 96000 Hz (0xc.0000)
+    Feedback Format = 16.16
+  Interface 1
+    Altset 1
+    Format: S24_3LE
+    Channels: 2
+    Endpoint: 0x01 (1 OUT) (ASYNC)
+    Rates: 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000
+    Data packet interval: 125 us
+    Bits: 24
+    Channel map: FL FR
+    Sync Endpoint: 0x81 (1 IN)
+    Sync EP Interface: 1
+    Sync EP Altset: 1
+    Implicit Feedback Mode: No
+  Interface 1
+    Altset 2
+    Format: S32_LE
+    Channels: 2
+    Endpoint: 0x01 (1 OUT) (ASYNC)
+    Rates: 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000
+    Data packet interval: 125 us
+    Bits: 32
+    Channel map: FL FR
+    Sync Endpoint: 0x81 (1 IN)
+    Sync EP Interface: 1
+    Sync EP Altset: 2
+    Implicit Feedback Mode: No

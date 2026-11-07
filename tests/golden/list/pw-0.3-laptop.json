@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "devices": [
+    {
+      "id": "alsa_output.pci-0000_00_1f.3.analog-stereo",
+      "description": "Built-in Audio Analog Stereo",
+      "direction": "playback",
+      "kind": "builtin",
+      "alsa": {
+        "card": 0,
+        "card_id": "PCH",
+        "device": 0,
+        "card_driver": "HDA-Intel",
+        "pcm_name": "ALC257 Analog"
+      },
+      "pipewire": {
+        "object_id": 50,
+        "node_name": "alsa_output.pci-0000_00_1f.3.analog-stereo",
+        "media_class": "Audio/Sink",
+        "state": "running",
+        "is_default": true
+      },
+      "capabilities": {
+        "rates": {
+          "value": {
+            "kind": "range",
+            "min": 44100,
+            "max": 192000
+          },
+          "source": "PipeWire"
+        },
+        "formats": {
+          "value": [
+            "S16_LE",
+            "S32_LE"
+          ],
+          "source": "PipeWire"
+        },
+        "channels": {
+          "value": [
+            2
+          ],
+          "source": "PipeWire"
+        }
+      },
+      "running": {
+        "value": {
+          "state": "active",
+          "rate": 48000,
+          "format": "S16_LE",
+          "channels": 2,
+          "period_frames": 1024,
+          "buffer_frames": 2048
+        },
+        "source": "Procfs"
+      }
+    },
+    {
+      "id": "alsa:PCH:3:playback",
+      "description": "HDA Intel PCH: HDMI 0",
+      "direction": "playback",
+      "kind": "hdmi",
+      "alsa": {
+        "card": 0,
+        "card_id": "PCH",
+        "device": 3,
+        "card_driver": "HDA-Intel",
+        "pcm_name": "HDMI 0"
+      },
+      "pipewire": null,
+      "capabilities": {
+        "rates": null,
+        "formats": null,
+        "channels": null
+      },
+      "running": {
+        "value": {
+          "state": "idle"
+        },
+        "source": "Procfs"
+      }
+    },
+    {
+      "id": "alsa_input.pci-0000_00_1f.3.analog-stereo",
+      "description": "Built-in Audio Analog Stereo",
+      "direction": "capture",
+      "kind": "builtin",
+      "alsa": {
+        "card": 0,
+        "card_id": "PCH",
+        "device": 0,
+        "card_driver": "HDA-Intel",
+        "pcm_name": "ALC257 Analog"
+      },
+      "pipewire": {
+        "object_id": 51,
+        "node_name": "alsa_input.pci-0000_00_1f.3.analog-stereo",
+        "media_class": "Audio/Source",
+        "state": "suspended",
+        "is_default": true
+      },
+      "capabilities": {
+        "rates": {
+          "value": {
+            "kind": "range",
+            "min": 44100,
+            "max": 192000
+          },
+          "source": "PipeWire"
+        },
+        "formats": {
+          "value": [
+            "S16_LE",
+            "S32_LE"
+          ],
+          "source": "PipeWire"
+        },
+        "channels": {
+          "value": [
+            1,
+            2
+          ],
+          "source": "PipeWire"
+        }
+      },
+      "running": {
+        "value": {
+          "state": "idle"
+        },
+        "source": "Procfs"
+      }
+    }
+  ],
+  "clock": {
+    "value": {
+      "rate": 48000,
+      "allowed_rates": [
+        48000
+      ],
+      "quantum": 1024,
+      "min_quantum": null,
+      "max_quantum": 2048,
+      "force_rate": 0,
+      "force_quantum": 0
+    },
+    "source": "PipeWire"
+  },
+  "pipewire_version": "0.3.48",
+  "notes": []
+}

@@ -1,8 +1,16 @@
-//! Command-line interface (spec §7). Commands are wired up milestone by milestone.
+//! Command-line interface (spec §7). This is the binary edge: it prints, and uses `anyhow`.
 
+mod capture;
+mod doctor;
+pub mod list;
+
+use std::io::{self, Write};
 use std::path::PathBuf;
 
+use anyhow::bail;
 use clap::{Args, Parser, Subcommand};
+
+use crate::probe::Probes;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -13,6 +21,10 @@ use clap::{Args, Parser, Subcommand};
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Command>,
+
+    /// Read a captured fixture directory instead of the live system (for development).
+    #[arg(long, global = true, hide = true, env = "RATEWISE_FIXTURE")]
+    pub fixture: Option<PathBuf>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -45,7 +57,7 @@ pub enum Command {
     Reset,
     /// Report the sound stack, versions, available tools and renderer.
     Doctor,
-    /// Dump pw-dump, /proc/asound and versions into a directory for bug reports and tests.
+    /// Save pw-dump, /proc/asound and versions into a new directory, for bug reports and tests.
     CaptureFixture { dir: PathBuf },
 }
 
@@ -84,6 +96,41 @@ pub struct Mode {
     /// Save permanently (survives reboots).
     #[arg(long)]
     pub save: bool,
+}
+
+pub fn run(cli: Cli) -> anyhow::Result<()> {
+    let probes = match &cli.fixture {
+        Some(dir) => Probes::fixture(dir),
+        None => Probes::system(),
+    };
+    let not_yet = |what: &str| -> anyhow::Result<()> {
+        bail!("{what} isn't available yet. For now, try `ratewise list` or `ratewise doctor`.")
+    };
+    match cli.command {
+        Some(Command::List { json }) => list::run(&probes, json),
+        Some(Command::Doctor) => doctor::run(&probes),
+        Some(Command::CaptureFixture { dir }) => {
+            if cli.fixture.is_some() {
+                bail!("capture-fixture always reads the live system. Run it without --fixture.");
+            }
+            capture::run(&dir)
+        }
+        None => not_yet("The graphical interface"),
+        Some(Command::Show { .. }) => not_yet("`ratewise show`"),
+        Some(Command::Set { .. }) => not_yet("`ratewise set`"),
+        Some(Command::Plan { .. }) => not_yet("`ratewise plan`"),
+        Some(Command::Revert) => not_yet("`ratewise revert`"),
+        Some(Command::Reset) => not_yet("`ratewise reset`"),
+    }
+}
+
+/// Writes to stdout. A closed pipe (`ratewise list | head`) is not an error.
+fn emit(text: &str) -> anyhow::Result<()> {
+    let mut out = io::stdout().lock();
+    match out.write_all(text.as_bytes()).and_then(|()| out.flush()) {
+        Err(e) if e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        r => Ok(r?),
+    }
 }
 
 #[cfg(test)]

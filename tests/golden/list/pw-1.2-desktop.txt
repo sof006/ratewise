@@ -1,0 +1,47 @@
+Outputs
+  Built-in Audio Analog Stereo — built-in
+    running   idle  [from /proc/asound]
+    rates     44.1, 48, 96, 192 kHz  [from PipeWire]
+    formats   S16_LE (16-bit), S32_LE (32-bit)  [from PipeWire]
+    channels  2  [from PipeWire]
+    id        alsa_output.pci-0000_00_1f.3.analog-stereo
+    alsa      hw:CARD=PCH,DEV=0
+  GP104 High Definition Audio Controller Digital Stereo (HDMI) — HDMI
+    running   idle  [from /proc/asound]
+    rates     32, 44.1, 48, 88.2, 96, 176.4, 192 kHz  [from PipeWire]
+    formats   S16_LE (16-bit), S32_LE (32-bit)  [from PipeWire]
+    channels  2  [from PipeWire]
+    id        alsa_output.pci-0000_01_00.1.hdmi-stereo
+    alsa      hw:CARD=NVidia,DEV=3
+  HDA NVidia: HDMI 1 — HDMI
+    running   idle  [from /proc/asound]
+    rates     unknown
+    formats   unknown
+    channels  unknown
+    id        alsa:NVidia:7:playback
+    alsa      hw:CARD=NVidia,DEV=7
+  D50s Analog Stereo — USB, default
+    running   96 kHz · 32-bit (S32_LE) · 2 ch · period 1024 (10.7 ms) · buffer 8192 (85.3 ms)  [from /proc/asound]
+    rates     44.1, 48, 88.2, 96, 176.4, 192, 352.8, 384, 705.6, 768 kHz  [from /proc/asound]
+    formats   S24_3LE (24-bit), S32_LE (32-bit)  [from /proc/asound]
+    channels  2  [from /proc/asound]
+    id        alsa_output.usb-Topping_D50s-00.analog-stereo
+    alsa      hw:CARD=D50s,DEV=0
+  Bluetooth Headphones — Bluetooth
+    running   idle  [from PipeWire]
+    rates     48 kHz  [from PipeWire]
+    formats   S16_LE (16-bit)  [from PipeWire]
+    channels  2  [from PipeWire]
+    id        bluez_output.00_00_00_00_00_01.1
+
+Inputs
+  Built-in Audio Analog Stereo — built-in, default
+    running   idle  [from /proc/asound]
+    rates     44.1, 48, 96, 192 kHz  [from PipeWire]
+    formats   S16_LE (16-bit), S32_LE (32-bit)  [from PipeWire]
+    channels  2  [from PipeWire]
+    id        alsa_input.pci-0000_00_1f.3.analog-stereo
+    alsa      hw:CARD=PCH,DEV=0
+
+PipeWire 1.2.7 clock: default 48 kHz · allowed 44.1, 48, 88.2, 96 kHz · quantum 1024 (min 32, max 2048)  [from PipeWire]
+

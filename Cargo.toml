@@ -12,7 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1"
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
@@ -24,3 +24,7 @@ lto = true
 codegen-units = 1
 strip = true
 panic = "unwind" # the crash handler (spec §6.3) needs unwinding
+
+[dev-dependencies]
+proptest = "1"
+similar = "2"

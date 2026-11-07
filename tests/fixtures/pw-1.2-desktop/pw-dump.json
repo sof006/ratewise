@@ -1,0 +1,407 @@
+[
+  {
+    "id": 0,
+    "type": "PipeWire:Interface:Core",
+    "version": 4,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "cookie": 1234567890,
+      "user-name": "REDACTED",
+      "host-name": "REDACTED",
+      "version": "1.2.7",
+      "name": "pipewire-0",
+      "change-mask": [ "props" ],
+      "props": {
+        "config.name": "pipewire.conf",
+        "core.name": "pipewire-0",
+        "default.clock.max-quantum": 2048,
+        "default.clock.min-quantum": 32,
+        "default.clock.quantum": 1024,
+        "default.clock.rate": 48000,
+        "object.id": 0,
+        "object.serial": 0
+      }
+    }
+  },
+  {
+    "id": 31,
+    "type": "PipeWire:Interface:Metadata",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "props": {
+      "metadata.name": "settings",
+      "object.serial": 31
+    },
+    "metadata": [
+      { "subject": 0, "key": "log.level", "type": "", "value": 2 },
+      { "subject": 0, "key": "clock.rate", "type": "", "value": 48000 },
+      { "subject": 0, "key": "clock.allowed-rates", "type": "", "value": [ 44100, 48000, 88200, 96000 ] },
+      { "subject": 0, "key": "clock.quantum", "type": "", "value": 1024 },
+      { "subject": 0, "key": "clock.min-quantum", "type": "", "value": 32 },
+      { "subject": 0, "key": "clock.max-quantum", "type": "", "value": 2048 },
+      { "subject": 0, "key": "clock.force-quantum", "type": "", "value": 0 },
+      { "subject": 0, "key": "clock.force-rate", "type": "", "value": 0 }
+    ]
+  },
+  {
+    "id": 32,
+    "type": "PipeWire:Interface:Metadata",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "props": {
+      "metadata.name": "default",
+      "object.serial": 32
+    },
+    "metadata": [
+      { "subject": 0, "key": "default.audio.sink", "type": "Spa:String:JSON", "value": { "name": "alsa_output.usb-Topping_D50s-00.analog-stereo" } },
+      { "subject": 0, "key": "default.audio.source", "type": "Spa:String:JSON", "value": { "name": "alsa_input.pci-0000_00_1f.3.analog-stereo" } },
+      { "subject": 0, "key": "default.configured.audio.sink", "type": "Spa:String:JSON", "value": { "name": "alsa_output.usb-Topping_D50s-00.analog-stereo" } }
+    ]
+  },
+  {
+    "id": 40,
+    "type": "PipeWire:Interface:Client",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "props": {
+        "application.name": "Firefox",
+        "application.process.user": "REDACTED",
+        "application.process.host": "REDACTED"
+      }
+    }
+  },
+  {
+    "id": 45,
+    "type": "PipeWire:Interface:Device",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "change-mask": [ "props", "params" ],
+      "props": {
+        "alsa.card": 0,
+        "alsa.card_name": "HDA Intel PCH",
+        "alsa.driver_name": "snd_hda_intel",
+        "api.alsa.card": 0,
+        "api.alsa.card.name": "HDA Intel PCH",
+        "api.alsa.path": "hw:0",
+        "api.alsa.use-acp": true,
+        "device.api": "alsa",
+        "device.bus": "pci",
+        "device.bus-path": "pci-0000:00:1f.3",
+        "device.description": "Built-in Audio",
+        "device.form-factor": "internal",
+        "device.icon-name": "audio-card-analog-pci",
+        "device.name": "alsa_card.pci-0000_00_1f.3",
+        "device.nick": "HDA Intel PCH",
+        "media.class": "Audio/Device",
+        "object.serial": 45
+      },
+      "params": {}
+    }
+  },
+  {
+    "id": 46,
+    "type": "PipeWire:Interface:Device",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "props": {
+        "api.alsa.card": 1,
+        "api.alsa.path": "hw:1",
+        "device.api": "alsa",
+        "device.bus": "pci",
+        "device.description": "GP104 High Definition Audio Controller",
+        "device.name": "alsa_card.pci-0000_01_00.1",
+        "media.class": "Audio/Device"
+      }
+    }
+  },
+  {
+    "id": 47,
+    "type": "PipeWire:Interface:Device",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "props": {
+        "api.alsa.card": 2,
+        "api.alsa.path": "hw:2",
+        "device.api": "alsa",
+        "device.bus": "usb",
+        "device.description": "D50s",
+        "device.name": "alsa_card.usb-Topping_D50s-00",
+        "device.product.id": "0x0001",
+        "device.serial": "REDACTED",
+        "device.vendor.id": "0x152a",
+        "media.class": "Audio/Device"
+      }
+    }
+  },
+  {
+    "id": 48,
+    "type": "PipeWire:Interface:Device",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "props": {
+        "api.bluez5.address": "00:00:00:00:00:01",
+        "api.bluez5.connection": "connected",
+        "device.api": "bluez5",
+        "device.bus": "bluetooth",
+        "device.description": "Bluetooth Headphones",
+        "device.form-factor": "headphone",
+        "device.name": "bluez_card.00_00_00_00_00_01",
+        "media.class": "Audio/Device"
+      }
+    }
+  },
+  {
+    "id": 52,
+    "type": "PipeWire:Interface:Node",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "max-input-ports": 65,
+      "max-output-ports": 0,
+      "change-mask": [ "input-ports", "output-ports", "state", "props", "params" ],
+      "n-input-ports": 2,
+      "n-output-ports": 2,
+      "state": "suspended",
+      "error": null,
+      "props": {
+        "alsa.card": 0,
+        "alsa.card_name": "HDA Intel PCH",
+        "alsa.device": 0,
+        "alsa.id": "ALC1220 Analog",
+        "alsa.name": "ALC1220 Analog",
+        "alsa.subdevice": 0,
+        "api.alsa.path": "front:0",
+        "api.alsa.pcm.stream": "playback",
+        "audio.channels": 2,
+        "audio.position": "FL,FR",
+        "card.profile.device": 4,
+        "device.api": "alsa",
+        "device.id": 45,
+        "device.profile.description": "Analog Stereo",
+        "device.profile.name": "analog-stereo",
+        "factory.name": "api.alsa.pcm.sink",
+        "media.class": "Audio/Sink",
+        "node.description": "Built-in Audio Analog Stereo",
+        "node.driver": true,
+        "node.name": "alsa_output.pci-0000_00_1f.3.analog-stereo",
+        "node.nick": "ALC1220 Analog",
+        "object.serial": 52,
+        "priority.driver": 1009
+      },
+      "params": {
+        "EnumFormat": [
+          {
+            "mediaType": "audio",
+            "mediaSubtype": "raw",
+            "format": { "default": "S32LE", "alt1": "S32LE", "alt2": "S16LE" },
+            "rate": { "default": 48000, "alt1": 44100, "alt2": 48000, "alt3": 96000, "alt4": 192000 },
+            "channels": 2,
+            "position": [ "FL", "FR" ]
+          }
+        ],
+        "Props": [ { "volume": 1.0, "mute": false } ]
+      }
+    }
+  },
+  {
+    "id": 53,
+    "type": "PipeWire:Interface:Node",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "state": "suspended",
+      "error": null,
+      "props": {
+        "alsa.card": 0,
+        "alsa.device": 0,
+        "api.alsa.path": "front:0",
+        "device.api": "alsa",
+        "device.id": 45,
+        "device.profile.name": "analog-stereo",
+        "media.class": "Audio/Source",
+        "node.description": "Built-in Audio Analog Stereo",
+        "node.name": "alsa_input.pci-0000_00_1f.3.analog-stereo",
+        "node.nick": "ALC1220 Analog"
+      },
+      "params": {
+        "EnumFormat": [
+          {
+            "mediaType": "audio",
+            "mediaSubtype": "raw",
+            "format": { "default": "S32LE", "alt1": "S32LE", "alt2": "S16LE" },
+            "rate": { "default": 48000, "alt1": 44100, "alt2": 48000, "alt3": 96000, "alt4": 192000 },
+            "channels": 2,
+            "position": [ "FL", "FR" ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": 60,
+    "type": "PipeWire:Interface:Node",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "state": "suspended",
+      "error": null,
+      "props": {
+        "alsa.card": 1,
+        "alsa.device": 3,
+        "alsa.id": "HDMI 0",
+        "api.alsa.path": "hdmi:1",
+        "device.api": "alsa",
+        "device.id": 46,
+        "device.profile.name": "hdmi-stereo",
+        "media.class": "Audio/Sink",
+        "node.description": "GP104 High Definition Audio Controller Digital Stereo (HDMI)",
+        "node.name": "alsa_output.pci-0000_01_00.1.hdmi-stereo"
+      },
+      "params": {
+        "EnumFormat": [
+          {
+            "mediaType": "audio",
+            "mediaSubtype": "raw",
+            "format": { "default": "S32LE", "alt1": "S32LE", "alt2": "S16LE" },
+            "rate": { "default": 48000, "alt1": 32000, "alt2": 44100, "alt3": 48000, "alt4": 88200, "alt5": 96000, "alt6": 176400, "alt7": 192000 },
+            "channels": 2,
+            "position": [ "FL", "FR" ]
+          },
+          {
+            "mediaType": "audio",
+            "mediaSubtype": "iec958",
+            "iec958Codec": { "default": "PCM", "alt1": "PCM", "alt2": "AC3" }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": 70,
+    "type": "PipeWire:Interface:Node",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "state": "running",
+      "error": null,
+      "props": {
+        "alsa.card": 2,
+        "alsa.device": 0,
+        "alsa.id": "USB Audio",
+        "api.alsa.path": "front:2",
+        "device.api": "alsa",
+        "device.id": 47,
+        "device.profile.name": "analog-stereo",
+        "media.class": "Audio/Sink",
+        "node.description": "D50s Analog Stereo",
+        "node.name": "alsa_output.usb-Topping_D50s-00.analog-stereo"
+      },
+      "params": {
+        "EnumFormat": [
+          {
+            "mediaType": "audio",
+            "mediaSubtype": "raw",
+            "format": { "default": "S32LE", "alt1": "S32LE", "alt2": "S24LE" },
+            "rate": { "default": 48000, "min": 44100, "max": 768000 },
+            "channels": 2,
+            "position": [ "FL", "FR" ]
+          }
+        ],
+        "Format": [
+          {
+            "mediaType": "audio",
+            "mediaSubtype": "raw",
+            "format": "S32LE",
+            "rate": 96000,
+            "channels": 2,
+            "position": [ "FL", "FR" ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": 80,
+    "type": "PipeWire:Interface:Node",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "state": "idle",
+      "error": null,
+      "props": {
+        "api.bluez5.address": "00:00:00:00:00:01",
+        "api.bluez5.codec": "aac",
+        "api.bluez5.profile": "a2dp-sink",
+        "device.api": "bluez5",
+        "device.id": 48,
+        "media.class": "Audio/Sink",
+        "node.description": "Bluetooth Headphones",
+        "node.name": "bluez_output.00_00_00_00_00_01.1"
+      },
+      "params": {
+        "EnumFormat": [
+          {
+            "mediaType": "audio",
+            "mediaSubtype": "raw",
+            "format": "S16LE",
+            "rate": 48000,
+            "channels": 2,
+            "position": [ "FL", "FR" ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": 90,
+    "type": "PipeWire:Interface:Node",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "state": "suspended",
+      "props": {
+        "factory.name": "support.null-audio-sink",
+        "media.class": "Audio/Sink",
+        "node.description": "Easy Effects Sink",
+        "node.name": "easyeffects_sink",
+        "node.virtual": true
+      },
+      "params": {
+        "EnumFormat": [
+          { "mediaType": "audio", "mediaSubtype": "raw", "format": "F32P", "rate": { "default": 48000, "min": 1, "max": 2147483647 }, "channels": 2 }
+        ]
+      }
+    }
+  },
+  {
+    "id": 100,
+    "type": "PipeWire:Interface:Node",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "state": "running",
+      "props": {
+        "application.name": "Firefox",
+        "client.id": 40,
+        "media.class": "Stream/Output/Audio",
+        "media.name": "REDACTED",
+        "node.name": "Firefox"
+      }
+    }
+  },
+  {
+    "id": 101,
+    "type": "PipeWire:Interface:Port",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "direction": "input",
+      "props": { "port.name": "playback_FL", "node.id": 70 }
+    }
+  }
+]

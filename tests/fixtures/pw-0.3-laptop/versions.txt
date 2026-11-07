@@ -1,0 +1,9 @@
+# Hand-written by Claude for development. Replace with a real `ratewise capture-fixture`.
+# Exercises older value spellings: props as strings, metadata values as JSON strings.
+synthetic: true
+kernel: 5.15.0-91-generic
+os: Ubuntu 22.04.3 LTS
+pipewire: pipewire | Compiled with libpipewire 0.3.48 | Linked with libpipewire 0.3.48
+wireplumber: wireplumber | Compiled with libwireplumber 0.4.8 | Linked with libwireplumber 0.4.8
+pactl: pactl 15.99.1 | Compiled with libpulse 15.99.0 | Linked with libpulse 15.99.0
+pulse-server: PulseAudio (on PipeWire 0.3.48)

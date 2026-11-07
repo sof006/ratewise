@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "devices": [
+    {
+      "id": "alsa:PCH:0:playback",
+      "description": "HDA Intel PCH: ALC887-VD Analog",
+      "direction": "playback",
+      "kind": "builtin",
+      "alsa": {
+        "card": 0,
+        "card_id": "PCH",
+        "device": 0,
+        "card_driver": "HDA-Intel",
+        "pcm_name": "ALC887-VD Analog"
+      },
+      "pipewire": null,
+      "capabilities": {
+        "rates": null,
+        "formats": null,
+        "channels": null
+      },
+      "running": {
+        "value": {
+          "state": "active",
+          "rate": 44100,
+          "format": "S16_LE",
+          "channels": 2,
+          "period_frames": 22050,
+          "buffer_frames": 88200
+        },
+        "source": "Procfs"
+      }
+    },
+    {
+      "id": "alsa:PCH:3:playback",
+      "description": "HDA Intel PCH: HDMI 0",
+      "direction": "playback",
+      "kind": "hdmi",
+      "alsa": {
+        "card": 0,
+        "card_id": "PCH",
+        "device": 3,
+        "card_driver": "HDA-Intel",
+        "pcm_name": "HDMI 0"
+      },
+      "pipewire": null,
+      "capabilities": {
+        "rates": null,
+        "formats": null,
+        "channels": null
+      },
+      "running": {
+        "value": {
+          "state": "idle"
+        },
+        "source": "Procfs"
+      }
+    },
+    {
+      "id": "alsa:PCH:0:capture",
+      "description": "HDA Intel PCH: ALC887-VD Analog",
+      "direction": "capture",
+      "kind": "builtin",
+      "alsa": {
+        "card": 0,
+        "card_id": "PCH",
+        "device": 0,
+        "card_driver": "HDA-Intel",
+        "pcm_name": "ALC887-VD Analog"
+      },
+      "pipewire": null,
+      "capabilities": {
+        "rates": null,
+        "formats": null,
+        "channels": null
+      },
+      "running": {
+        "value": {
+          "state": "idle"
+        },
+        "source": "Procfs"
+      }
+    }
+  ],
+  "clock": null,
+  "pipewire_version": null,
+  "notes": [
+    {
+      "source": "PipeWire",
+      "message": "this fixture has no pw-dump.json, so it simulates a system without PipeWire"
+    }
+  ]
+}

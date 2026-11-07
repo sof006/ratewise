@@ -1,6 +1,5 @@
-use anyhow::bail;
 use clap::Parser;
-use ratewise::cli::{Cli, Command};
+use ratewise::cli::{self, Cli};
 use tracing_subscriber::EnvFilter;
 
 fn main() -> anyhow::Result<()> {
@@ -14,17 +13,5 @@ fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
     tracing::debug!(?cli, "parsed command line");
-
-    let name = match cli.command {
-        None => "the GUI",
-        Some(Command::List { .. }) => "`ratewise list`",
-        Some(Command::Show { .. }) => "`ratewise show`",
-        Some(Command::Set { .. }) => "`ratewise set`",
-        Some(Command::Plan { .. }) => "`ratewise plan`",
-        Some(Command::Revert) => "`ratewise revert`",
-        Some(Command::Reset) => "`ratewise reset`",
-        Some(Command::Doctor) => "`ratewise doctor`",
-        Some(Command::CaptureFixture { .. }) => "`ratewise capture-fixture`",
-    };
-    bail!("{name} isn't implemented yet. Run `ratewise --help` to see what's planned.")
+    cli::run(cli)
 }
