@@ -191,6 +191,45 @@ impl SampleFormat {
         }
     }
 
+    /// The PipeWire/SPA name used by `audio.format`, e.g. `S24_32LE` for ALSA's `S24_LE`.
+    pub fn pipewire_name(&self) -> Option<&'static str> {
+        Some(match self {
+            Self::U8 => "U8",
+            Self::S8 => "S8",
+            Self::S16Le => "S16LE",
+            Self::S16Be => "S16BE",
+            Self::S24Le => "S24_32LE",
+            Self::S24Be => "S24_32BE",
+            Self::S24_3Le => "S24LE",
+            Self::S24_3Be => "S24BE",
+            Self::S32Le => "S32LE",
+            Self::S32Be => "S32BE",
+            Self::FloatLe => "F32LE",
+            Self::FloatBe => "F32BE",
+            Self::Float64Le => "F64LE",
+            Self::Float64Be => "F64BE",
+            Self::Other(_) => return None,
+        })
+    }
+
+    /// The PulseAudio name used by `default-sample-format`, e.g. `s24-32le`.
+    pub fn pulse_name(&self) -> Option<&'static str> {
+        Some(match self {
+            Self::U8 => "u8",
+            Self::S16Le => "s16le",
+            Self::S16Be => "s16be",
+            Self::S24Le => "s24-32le",
+            Self::S24Be => "s24-32be",
+            Self::S24_3Le => "s24le",
+            Self::S24_3Be => "s24be",
+            Self::S32Le => "s32le",
+            Self::S32Be => "s32be",
+            Self::FloatLe => "float32le",
+            Self::FloatBe => "float32be",
+            _ => return None,
+        })
+    }
+
     /// Bit depth of the samples (not the container), if known.
     pub fn bits(&self) -> Option<u32> {
         match self {

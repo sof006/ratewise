@@ -109,12 +109,15 @@ Grey out any value the device can't do, with a tooltip explaining why.
   - 0.5+: `~/.config/wireplumber/wireplumber.conf.d/60-ratewise.conf` using `monitor.alsa.rules` SPA-JSON.
   - 0.4: `~/.config/wireplumber/main.lua.d/60-ratewise.lua` using `alsa_monitor.rules`.
   - Match devices on a stable key (`node.name` or `device.name`), never on a numeric ID.
-- **PulseAudio:** edit `~/.config/pulse/daemon.conf` (`default-sample-rate`, `alternate-sample-rate`, `default-sample-format`, `avoid-resampling`, fragments). Create it from defaults if it's missing.
-- **Bare ALSA:** `~/.asoundrc` with `defaults.pcm.dmix.rate`, `.format` and `defaults.pcm.dsnoop.*`.
+- **Resampler quality (PipeWire):** `stream.properties { resample.quality = N }` in `~/.config/pipewire/client.conf.d/` and `pipewire-pulse.conf.d/` (plus `client-rt.conf.d/` on PipeWire 0.3, whose ALSA-plugin clients read it). Programs pick it up when they start playing.
+- **PulseAudio:** a drop-in, `~/.config/pulse/daemon.conf.d/60-ratewise.conf` (`default-sample-rate`, `alternate-sample-rate`, `avoid-resampling = yes`, `default-sample-format`). PulseAudio has a `.d` mechanism, but derives the folder from whichever `daemon.conf` it opened, so it reads `~/.config/pulse/daemon.conf.d/` only when `~/.config/pulse/daemon.conf` exists. If it doesn't, Ratewise creates it as a copy of `/etc/pulse/daemon.conf` (the user file replaces the system one), records a fingerprint, and `reset` removes it only if nobody edited it. Quantum, resampler and per-device settings aren't offered. `$PULSE_CONFIG` set → refuse.
+- **Bare ALSA:** a marked block in `~/.asoundrc` with `defaults.pcm.dmix.rate` and `.format` (dsnoop reads these too; there are no `defaults.pcm.dsnoop.*` keys), and per-card period sizes as alsa-lib's `pcm/dmix.conf` and `pcm/dsnoop.conf` look them up: `defaults.dmix.<card_id>.period_size` for playback, `cards.<card_id>.pcm.dsnoop.period_size` for capture.
 
 ### Safety
-- Ratewise owns **only its own files** (`60-ratewise.*`). It never rewrites user-authored files except PulseAudio `daemon.conf`/`.asoundrc`, which have no drop-in mechanism. For those, edit only a clearly marked block, keep any other content byte-for-byte, and back up first.
-- Back up to `~/.local/state/ratewise/backups/<timestamp>/` before any write. **Revert** restores the last backup. "Reset to defaults" removes Ratewise's files.
+- Ratewise owns **only its own files** (`60-ratewise.*`, plus a `~/.config/pulse/daemon.conf` it created). The only user-authored file it edits is `~/.asoundrc`, which has no drop-in mechanism: there it edits only a block between `# >>> ratewise >>>` and `# <<< ratewise <<<`, keeps any other content byte-for-byte, and warns when later lines override its keys. A half-open block is refused, not repaired.
+- It never writes through a symlink, and refuses at apply time if any target changed since the plan was made. Writes are atomic (temp file + rename, keeping permissions); a failure puts back files already written and undoes commands already run.
+- Back up to `~/.local/state/ratewise/backups/<YYYYMMDD-HHMMSS>/` (UTC; `manifest.json` plus `files/<n>`) before any write, including the commands that undo live changes. **Revert** restores the newest backup not yet reverted, so repeating it walks back through history. "Reset to defaults" removes Ratewise's files and its block, and releases forced live settings.
+- What Ratewise has saved lives in `~/.local/state/ratewise/saved.json`; generated files are regenerated from it on every save, so edits to them are lost (their header says so).
 - After a persistent change, offer **Restart audio services**:
   - With a systemd user session: `systemctl --user restart pipewire pipewire-pulse wireplumber` (or `pulseaudio -k`).
   - Without one (OpenRC/runit): fall back to killing and relaunching the processes, or tell the user to log out and back in.
@@ -187,14 +190,17 @@ ratewise list [--json]              devices, capabilities, running state
 ratewise show <device> [--json]
 ratewise set rate 96000 [--device X] [--live|--save]
 ratewise set allowed-rates 44100,48000,88200,96000 --save
-ratewise set quantum 256 [--live|--save]
+ratewise set quantum 256 [--live|--save] [--restart]
+ratewise set {min-quantum,max-quantum,force-rate,force-quantum,format,period-size,headroom,suspend,resample-quality} …
 ratewise plan …                     print the plan + diffs, change nothing
-ratewise revert | reset
+ratewise revert | reset [--restart] [--dry-run]
 ratewise doctor                     stack/version/tools/renderer report
 ratewise capture-fixture <dir>      dump pw-dump, /proc/asound, versions for bug reports + tests
 ```
 
 Device selectors accept the stable name, the ALSA `hw:CARD=…` id, or a fuzzy description match. `--json` output is a stable, documented schema.
+
+Without `--live` or `--save`, `set` changes things live when it can and otherwise explains that `--save` is needed. Values accept friendly spellings (`96k`, `44.1kHz`, `default`; `off` for force values and suspend). `--restart` restarts the affected services after a save, and asks for nothing first, so the GUI must confirm. Hidden flags for development: `--fixture <dir>` reads a captured system, and `--sandbox <dir>` sends every write into `<dir>/home` and only records commands; `--fixture` refuses to write without `--sandbox`.
 
 ---
 

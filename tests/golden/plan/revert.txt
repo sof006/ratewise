@@ -1,0 +1,19 @@
+Undo “Set the default sample rate to 96 kHz (saved)” (backup 20261107-120000).
+
+Steps
+  1. Remove ~/.config/pipewire/pipewire.conf.d/60-ratewise.conf
+     Restored from the backup.
+       @@ -1,5 +0,0 @@
+       -# Written by Ratewise. It regenerates this file on every `ratewise set --save`,
+       -# so edits here are lost. `ratewise reset` removes it.
+       -context.properties = {
+       -    default.clock.rate = 96000
+       -}
+  2. Remove ~/.local/state/ratewise/saved.json
+     Restored from the backup.
+  3. Run: pw-metadata -n settings 0 clock.quantum 1024
+     Restores the live setting.
+
+Afterwards
+  Restart PipeWire, pipewire-pulse and WirePlumber for this to take effect. Sound stops for a moment. Add --restart to do it now, or run:
+    systemctl --user restart pipewire.service pipewire-pulse.service wireplumber.service

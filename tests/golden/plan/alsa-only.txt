@@ -1,0 +1,61 @@
+Set the default sample rate to 48 kHz (saved).
+
+Steps
+  1. Update ~/.asoundrc
+     ALSA's dmix and dsnoop defaults, in a marked block.
+       @@ -4,2 +4,5 @@
+            slave.pcm "hw:1,0"
+        }
+       +# >>> ratewise >>> Managed by Ratewise; `ratewise reset` removes this block.
+       +defaults.pcm.dmix.rate 48000
+       +# <<< ratewise <<<
+  2. Create ~/.local/state/ratewise/saved.json
+     Ratewise's record of what it has saved.
+
+Afterwards
+  ALSA reads ~/.asoundrc when a program opens a device, so restart programs that are playing or recording to pick it up.
+
+Ratewise backs up every file first; `ratewise revert` undoes this.
+
+=====
+
+Set the default sample format to S32_LE (32-bit) (saved).
+
+Steps
+  1. Update ~/.asoundrc
+     ALSA's dmix and dsnoop defaults, in a marked block.
+       @@ -6,3 +6,4 @@
+        # >>> ratewise >>> Managed by Ratewise; `ratewise reset` removes this block.
+        defaults.pcm.dmix.rate 48000
+       +defaults.pcm.dmix.format "S32_LE"
+        # <<< ratewise <<<
+  2. Update ~/.local/state/ratewise/saved.json
+     Ratewise's record of what it has saved.
+
+Notes
+  - These devices don't support S32_LE, so dmix will fail to open them: USB PnP Sound Device: USB Audio.
+
+Afterwards
+  ALSA reads ~/.asoundrc when a program opens a device, so restart programs that are playing or recording to pick it up.
+
+Ratewise backs up every file first; `ratewise revert` undoes this.
+
+=====
+
+Set the period size of USB PnP Sound Device: USB Audio to 256 frames (saved).
+
+Steps
+  1. Update ~/.asoundrc
+     ALSA's dmix and dsnoop defaults, in a marked block.
+       @@ -7,3 +7,4 @@
+        defaults.pcm.dmix.rate 48000
+        defaults.pcm.dmix.format "S32_LE"
+       +cards.Device.pcm.dsnoop.period_size 256
+        # <<< ratewise <<<
+  2. Update ~/.local/state/ratewise/saved.json
+     Ratewise's record of what it has saved.
+
+Afterwards
+  ALSA reads ~/.asoundrc when a program opens a device, so restart programs that are playing or recording to pick it up.
+
+Ratewise backs up every file first; `ratewise revert` undoes this.

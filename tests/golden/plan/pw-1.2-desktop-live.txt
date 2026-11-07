@@ -1,0 +1,13 @@
+Set the default quantum (buffer size) to 256 frames (live, until PipeWire restarts).
+
+Steps
+  1. Run: pw-metadata -n settings 0 clock.quantum 256
+     Changes PipeWire's clock.quantum setting now.
+
+Notes
+  - 256 frames at 48 kHz is 5.3 ms. Lower means less latency but more risk of crackles.
+
+Afterwards
+  Live changes last until PipeWire restarts. To keep it, run the same command with --save.
+
+`ratewise revert` undoes this.

@@ -68,7 +68,7 @@ pub fn render_text(snap: &Snapshot) -> String {
     s
 }
 
-fn device(s: &mut String, d: &Device) {
+pub(crate) fn device(s: &mut String, d: &Device) {
     let default = match &d.pipewire {
         Some(p) if p.is_default => ", default",
         _ => "",

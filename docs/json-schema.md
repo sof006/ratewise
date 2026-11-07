@@ -51,3 +51,29 @@ Capabilities prefer the most direct source: the kernel's answer, then `/proc/aso
 - **Formats**: ALSA names, e.g. `"S16_LE"`, `"S24_LE"` (24-bit in 32-bit container), `"S24_3LE"` (packed 24-bit), `"S32_LE"`, `"FLOAT_LE"`. Unknown formats are passed through verbatim.
 - **Running**: `{ "state": "idle" }` or `{ "state": "active", "rate": 48000, "format": "S32_LE" | null, "channels": 2 | null, "period_frames": 1024 | null, "buffer_frames": 4096 | null }`.
 - **Clock**: `rate`, `allowed_rates` (array), `quantum`, `min_quantum`, `max_quantum`, `force_rate`, `force_quantum`; each may be null. A force value of `0` means "not forced".
+
+# `ratewise show <device> --json` schema
+
+```jsonc
+{
+  "schema_version": 1,
+  "device": Device,                    // as in `list --json`
+  "saved": Saved | null                // what Ratewise has saved for this device; null if nothing
+}
+```
+
+## Saved
+
+| Field | Type | Notes |
+|---|---|---|
+| `description` | string | The device's name when it was saved. |
+| `direction` | `"playback"` \| `"capture"` \| `"duplex"` | |
+| `pipewire_node` | string \| null | The `node.name` the WirePlumber rule matches. |
+| `alsa_card_id` | string \| null | The card id used in `~/.asoundrc` keys. |
+| `format` | string \| null | ALSA name, as in Formats. |
+| `rate` | number \| null | Hz. |
+| `period_size` | number \| null | Frames. |
+| `headroom` | number \| null | Frames. |
+| `disable_suspend` | bool | `true`: kept open when idle. |
+
+`~/.local/state/ratewise/saved.json` (Ratewise's record of everything it saved) uses the same shapes, but it's internal and may change between versions.

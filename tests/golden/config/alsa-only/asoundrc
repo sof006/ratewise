@@ -1,0 +1,10 @@
+# my settings
+pcm.!default {
+    type plug
+    slave.pcm "hw:1,0"
+}
+# >>> ratewise >>> Managed by Ratewise; `ratewise reset` removes this block.
+defaults.pcm.dmix.rate 48000
+defaults.pcm.dmix.format "S32_LE"
+cards.Device.pcm.dsnoop.period_size 256
+# <<< ratewise <<<

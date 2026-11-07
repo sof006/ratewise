@@ -1,0 +1,69 @@
+Set the default sample rate to 48 kHz (saved).
+
+Steps
+  1. Create ~/.config/pulse/daemon.conf
+     PulseAudio reads ~/.config/pulse/daemon.conf.d/ only when this file exists, so Ratewise creates it as a copy of the system file.
+       @@ -0,0 +1,5 @@
+       +# Created by Ratewise as a copy of /etc/pulse/daemon.conf. PulseAudio reads
+       +# ~/.config/pulse/daemon.conf.d/ only when this file exists. You can edit it.
+       +; System daemon.conf
+       +; default-sample-rate = 44100
+       +flat-volumes = no
+  2. Create ~/.config/pulse/daemon.conf.d/60-ratewise.conf
+     PulseAudio's sample rate and format.
+       @@ -0,0 +1,3 @@
+       +# Written by Ratewise. It regenerates this file on every `ratewise set --save`,
+       +# so edits here are lost. `ratewise reset` removes it.
+       +default-sample-rate = 48000
+  3. Create ~/.local/state/ratewise/saved.json
+     Ratewise's record of what it has saved.
+
+Afterwards
+  Restart PulseAudio for this to take effect. Sound stops for a moment. Add --restart to do it now, or run:
+    systemctl --user restart pulseaudio.service
+
+Ratewise backs up every file first; `ratewise revert` undoes this.
+
+=====
+
+Set the allowed sample rates to 44.1, 48 kHz (saved).
+
+Steps
+  1. Update ~/.config/pulse/daemon.conf.d/60-ratewise.conf
+     PulseAudio's sample rate and format.
+       @@ -2,2 +2,4 @@
+        # so edits here are lost. `ratewise reset` removes it.
+        default-sample-rate = 48000
+       +alternate-sample-rate = 44100
+       +avoid-resampling = yes
+  2. Update ~/.local/state/ratewise/saved.json
+     Ratewise's record of what it has saved.
+
+Afterwards
+  Restart PulseAudio for this to take effect. Sound stops for a moment. Add --restart to do it now, or run:
+    systemctl --user restart pulseaudio.service
+
+Ratewise backs up every file first; `ratewise revert` undoes this.
+
+=====
+
+Set the default sample format to S24_LE (24-bit) (saved).
+
+Steps
+  1. Update ~/.config/pulse/daemon.conf.d/60-ratewise.conf
+     PulseAudio's sample rate and format.
+       @@ -4,2 +4,3 @@
+        alternate-sample-rate = 44100
+        avoid-resampling = yes
+       +default-sample-format = s24-32le
+  2. Update ~/.local/state/ratewise/saved.json
+     Ratewise's record of what it has saved.
+
+Notes
+  - These devices don't support S24_LE, so it will be converted for them: HDA Intel PCH: HDMI 0, HDA Intel PCH: ALC887-VD Analog.
+
+Afterwards
+  Restart PulseAudio for this to take effect. Sound stops for a moment. Add --restart to do it now, or run:
+    systemctl --user restart pulseaudio.service
+
+Ratewise backs up every file first; `ratewise revert` undoes this.

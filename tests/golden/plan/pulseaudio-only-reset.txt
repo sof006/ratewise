@@ -1,0 +1,28 @@
+Remove every setting Ratewise has saved.
+
+Steps
+  1. Remove ~/.config/pulse/daemon.conf.d/60-ratewise.conf
+     Ratewise's own file.
+       @@ -1,6 +0,0 @@
+       -# Written by Ratewise. It regenerates this file on every `ratewise set --save`,
+       -# so edits here are lost. `ratewise reset` removes it.
+       -default-sample-rate = 48000
+       -alternate-sample-rate = 44100
+       -avoid-resampling = yes
+       -default-sample-format = s24-32le
+  2. Remove ~/.config/pulse/daemon.conf
+     Ratewise created this copy and nobody has edited it.
+       @@ -1,5 +0,0 @@
+       -# Created by Ratewise as a copy of /etc/pulse/daemon.conf. PulseAudio reads
+       -# ~/.config/pulse/daemon.conf.d/ only when this file exists. You can edit it.
+       -; System daemon.conf
+       -; default-sample-rate = 44100
+       -flat-volumes = no
+  3. Remove ~/.local/state/ratewise/saved.json
+     Ratewise's record of what it has saved.
+
+Afterwards
+  Restart PulseAudio for this to take effect. Sound stops for a moment. Add --restart to do it now, or run:
+    systemctl --user restart pulseaudio.service
+
+Ratewise backs up every file first; `ratewise revert` undoes this.

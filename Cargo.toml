@@ -13,9 +13,10 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive", "env"] }
+rustix = { version = "1", features = ["fs"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-rustix = { version = "1", features = ["fs"] }
+similar = "2"
 thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -28,4 +29,3 @@ panic = "unwind" # the crash handler (spec §6.3) needs unwinding
 
 [dev-dependencies]
 proptest = "1"
-similar = "2"

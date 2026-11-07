@@ -1,0 +1,113 @@
+Set the sample format of Built-in Audio Analog Stereo to S16_LE (16-bit) (saved).
+
+Steps
+  1. Create ~/.config/wireplumber/main.lua.d/60-ratewise.lua
+     WirePlumber rules for per-device settings.
+       @@ -0,0 +1,16 @@
+       +-- Written by Ratewise. It regenerates this file on every `ratewise set --save`,
+       +-- so edits here are lost. `ratewise reset` removes it.
+       +alsa_monitor = alsa_monitor or {}
+       +alsa_monitor.rules = alsa_monitor.rules or {}
+       +
+       +-- Built-in Audio Analog Stereo
+       +table.insert(alsa_monitor.rules, {
+       +  matches = {
+       +    {
+       +      { "node.name", "equals", "alsa_output.pci-0000_00_1f.3.analog-stereo" },
+       +    },
+       +  },
+       +  apply_properties = {
+       +    ["audio.format"] = "S16LE",
+       +  },
+       +})
+  2. Create ~/.local/state/ratewise/saved.json
+     Ratewise's record of what it has saved.
+
+Afterwards
+  Restart PipeWire, pipewire-pulse and WirePlumber for this to take effect. Sound stops for a moment. Add --restart to do it now, or run:
+    systemctl --user restart pipewire.service pipewire-pulse.service wireplumber.service
+
+Ratewise backs up every file first; `ratewise revert` undoes this.
+
+=====
+
+Set the headroom of Built-in Audio Analog Stereo to 1024 frames (saved).
+
+Steps
+  1. Update ~/.config/wireplumber/main.lua.d/60-ratewise.lua
+     WirePlumber rules for per-device settings.
+       @@ -13,4 +13,5 @@
+          apply_properties = {
+            ["audio.format"] = "S16LE",
+       +    ["api.alsa.headroom"] = 1024,
+          },
+        })
+  2. Update ~/.local/state/ratewise/saved.json
+     Ratewise's record of what it has saved.
+
+Afterwards
+  Restart PipeWire, pipewire-pulse and WirePlumber for this to take effect. Sound stops for a moment. Add --restart to do it now, or run:
+    systemctl --user restart pipewire.service pipewire-pulse.service wireplumber.service
+
+Ratewise backs up every file first; `ratewise revert` undoes this.
+
+=====
+
+Keep Built-in Audio Analog Stereo open when idle (no suspend) (saved).
+
+Steps
+  1. Update ~/.config/wireplumber/main.lua.d/60-ratewise.lua
+     WirePlumber rules for per-device settings.
+       @@ -14,4 +14,5 @@
+            ["audio.format"] = "S16LE",
+            ["api.alsa.headroom"] = 1024,
+       +    ["session.suspend-timeout-seconds"] = 0,
+          },
+        })
+  2. Update ~/.local/state/ratewise/saved.json
+     Ratewise's record of what it has saved.
+
+Afterwards
+  Restart PipeWire, pipewire-pulse and WirePlumber for this to take effect. Sound stops for a moment. Add --restart to do it now, or run:
+    systemctl --user restart pipewire.service pipewire-pulse.service wireplumber.service
+
+Ratewise backs up every file first; `ratewise revert` undoes this.
+
+=====
+
+Set the resampler quality to 6 (saved).
+
+Steps
+  1. Create ~/.config/pipewire/client.conf.d/60-ratewise.conf
+     Resampler quality for PipeWire programs.
+       @@ -0,0 +1,5 @@
+       +# Written by Ratewise. It regenerates this file on every `ratewise set --save`,
+       +# so edits here are lost. `ratewise reset` removes it.
+       +stream.properties = {
+       +    resample.quality = 6
+       +}
+  2. Create ~/.config/pipewire/pipewire-pulse.conf.d/60-ratewise.conf
+     Resampler quality for PulseAudio programs on PipeWire.
+       @@ -0,0 +1,5 @@
+       +# Written by Ratewise. It regenerates this file on every `ratewise set --save`,
+       +# so edits here are lost. `ratewise reset` removes it.
+       +stream.properties = {
+       +    resample.quality = 6
+       +}
+  3. Create ~/.config/pipewire/client-rt.conf.d/60-ratewise.conf
+     Resampler quality for ALSA-plugin programs (PipeWire 0.3).
+       @@ -0,0 +1,5 @@
+       +# Written by Ratewise. It regenerates this file on every `ratewise set --save`,
+       +# so edits here are lost. `ratewise reset` removes it.
+       +stream.properties = {
+       +    resample.quality = 6
+       +}
+  4. Update ~/.local/state/ratewise/saved.json
+     Ratewise's record of what it has saved.
+
+Afterwards
+  Restart PipeWire, pipewire-pulse and WirePlumber for this to take effect. Sound stops for a moment. Add --restart to do it now, or run:
+    systemctl --user restart pipewire.service pipewire-pulse.service wireplumber.service
+  Programs read the resampler quality when they start playing, so restart any that are already playing to hear the change.
+
+Ratewise backs up every file first; `ratewise revert` undoes this.
