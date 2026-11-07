@@ -20,7 +20,13 @@ fn help_and_version_exit_zero() {
 
 #[test]
 fn doctor_exits_zero_on_every_fixture() {
-    for name in ["pw-1.2-desktop", "pw-0.3-laptop", "alsa-only", "no-sound"] {
+    for name in [
+        "arch-desktop",
+        "pw-1.2-desktop",
+        "pw-0.3-laptop",
+        "alsa-only",
+        "no-sound",
+    ] {
         let out = ratewise()
             .args(["doctor", "--fixture"])
             .arg(fixture(name))

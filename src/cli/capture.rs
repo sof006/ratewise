@@ -1,5 +1,6 @@
 //! `ratewise capture-fixture <dir>`: saves what the probes read, so a real system
-//! can become a test fixture (spec §8). Personal details are redacted from pw-dump.
+//! can become a test fixture (spec §8). Personal details are redacted from
+//! pw-dump.json and wpctl-status.txt.
 
 use std::fs;
 use std::io::Read;
@@ -8,8 +9,24 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, bail};
 
-use crate::core::redact::redact_pw_dump;
+use crate::core::redact::Redactor;
 use crate::probe::command;
+
+/// A redactor primed with this machine's login and host names.
+fn local_identity() -> Redactor {
+    let mut r = Redactor::new();
+    for var in ["USER", "LOGNAME"] {
+        if let Ok(v) = std::env::var(var) {
+            r.add_word(&v);
+        }
+    }
+    for path in ["/proc/sys/kernel/hostname", "/etc/hostname"] {
+        if let Ok(h) = fs::read_to_string(path) {
+            r.add_word(&h);
+        }
+    }
+    r
+}
 
 const MAX_FILE_BYTES: u64 = 1 << 20;
 const MAX_DEPTH: usize = 6;
@@ -29,20 +46,25 @@ pub fn run(dir: &Path) -> anyhow::Result<()> {
     fs::create_dir_all(dir).with_context(|| format!("couldn't create {}", dir.display()))?;
 
     let mut summary = Vec::new();
+    let mut redactor = local_identity();
 
     // pw-dump, redacted.
     match command::run("pw-dump", &[], Duration::from_secs(10)) {
         Ok(out) if out.status.success() => match serde_json::from_str(&out.stdout) {
             Ok(mut value) => {
-                redact_pw_dump(&mut value);
+                redactor.learn(&value);
+                redactor.redact_json(&mut value);
                 let text = serde_json::to_string_pretty(&value)? + "\n";
                 fs::write(dir.join("pw-dump.json"), text)?;
                 summary.push("pw-dump.json (redacted)".to_string());
             }
             Err(e) => {
-                fs::write(dir.join("pw-dump.unparsed.txt"), &out.stdout)?;
+                fs::write(
+                    dir.join("pw-dump.unparsed.txt"),
+                    redactor.redact_text(&out.stdout),
+                )?;
                 summary.push(format!(
-                    "pw-dump.unparsed.txt (NOT redacted: output wasn't valid JSON: {e})"
+                    "pw-dump.unparsed.txt (output wasn't valid JSON: {e}; only user/host names and MAC addresses were redacted)"
                 ));
             }
         },
@@ -70,7 +92,10 @@ pub fn run(dir: &Path) -> anyhow::Result<()> {
     if let Ok(out) = command::run("wpctl", &["status"], Duration::from_secs(5))
         && out.status.success()
     {
-        fs::write(dir.join("wpctl-status.txt"), out.stdout)?;
+        fs::write(
+            dir.join("wpctl-status.txt"),
+            redactor.redact_text(&out.stdout),
+        )?;
         summary.push("wpctl-status.txt".into());
     }
 

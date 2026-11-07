@@ -1,0 +1,307 @@
+{
+  "schema_version": 1,
+  "devices": [
+    {
+      "id": "alsa_output.usb-Topping_E30_II_Lite-00.HiFi__Headphones__sink",
+      "description": "E30 II Lite Headphones",
+      "direction": "playback",
+      "kind": "usb",
+      "alsa": {
+        "card": 0,
+        "card_id": "Lite",
+        "device": 0,
+        "card_driver": "USB-Audio",
+        "pcm_name": "USB Audio"
+      },
+      "pipewire": {
+        "object_id": 59,
+        "node_name": "alsa_output.usb-Topping_E30_II_Lite-00.HiFi__Headphones__sink",
+        "media_class": "Audio/Sink",
+        "state": "running",
+        "is_default": true
+      },
+      "capabilities": {
+        "rates": {
+          "value": {
+            "kind": "discrete",
+            "rates": [
+              44100,
+              48000,
+              88200,
+              96000,
+              176400,
+              192000,
+              352800,
+              384000,
+              705600,
+              768000
+            ]
+          },
+          "source": "Procfs"
+        },
+        "formats": {
+          "value": [
+            "S32_LE",
+            "DSD_U32_BE"
+          ],
+          "source": "Procfs"
+        },
+        "channels": {
+          "value": [
+            2
+          ],
+          "source": "Procfs"
+        }
+      },
+      "running": {
+        "value": {
+          "state": "active",
+          "rate": 48000,
+          "format": "S32_LE",
+          "channels": 2,
+          "period_frames": 512,
+          "buffer_frames": 32768
+        },
+        "source": "Procfs"
+      }
+    },
+    {
+      "id": "alsa:HDMI:3:playback",
+      "description": "HDA ATI HDMI: HDMI 0",
+      "direction": "playback",
+      "kind": "hdmi",
+      "alsa": {
+        "card": 1,
+        "card_id": "HDMI",
+        "device": 3,
+        "card_driver": "HDA-Intel",
+        "pcm_name": "HDMI 0"
+      },
+      "pipewire": null,
+      "capabilities": {
+        "rates": null,
+        "formats": null,
+        "channels": null
+      },
+      "running": {
+        "value": {
+          "state": "idle"
+        },
+        "source": "Procfs"
+      }
+    },
+    {
+      "id": "alsa_output.pci-0000_03_00.1.hdmi-stereo-extra1",
+      "description": "Navi 48 HDMI/DP Audio Controller Digital Stereo (HDMI 2) [BenQ GW2490E]",
+      "direction": "playback",
+      "kind": "hdmi",
+      "alsa": {
+        "card": 1,
+        "card_id": "HDMI",
+        "device": 7,
+        "card_driver": "HDA-Intel",
+        "pcm_name": "HDMI 1"
+      },
+      "pipewire": {
+        "object_id": 56,
+        "node_name": "alsa_output.pci-0000_03_00.1.hdmi-stereo-extra1",
+        "media_class": "Audio/Sink",
+        "state": "suspended",
+        "is_default": false
+      },
+      "capabilities": {
+        "rates": {
+          "value": {
+            "kind": "range",
+            "min": 32000,
+            "max": 48000
+          },
+          "source": "PipeWire"
+        },
+        "formats": {
+          "value": [
+            "S16_LE",
+            "S32_LE"
+          ],
+          "source": "PipeWire"
+        },
+        "channels": {
+          "value": [
+            2
+          ],
+          "source": "PipeWire"
+        }
+      },
+      "running": {
+        "value": {
+          "state": "idle"
+        },
+        "source": "Procfs"
+      }
+    },
+    {
+      "id": "alsa:HDMI:8:playback",
+      "description": "HDA ATI HDMI: HDMI 2",
+      "direction": "playback",
+      "kind": "hdmi",
+      "alsa": {
+        "card": 1,
+        "card_id": "HDMI",
+        "device": 8,
+        "card_driver": "HDA-Intel",
+        "pcm_name": "HDMI 2"
+      },
+      "pipewire": null,
+      "capabilities": {
+        "rates": null,
+        "formats": null,
+        "channels": null
+      },
+      "running": {
+        "value": {
+          "state": "idle"
+        },
+        "source": "Procfs"
+      }
+    },
+    {
+      "id": "alsa:HDMI:9:playback",
+      "description": "HDA ATI HDMI: HDMI 3",
+      "direction": "playback",
+      "kind": "hdmi",
+      "alsa": {
+        "card": 1,
+        "card_id": "HDMI",
+        "device": 9,
+        "card_driver": "HDA-Intel",
+        "pcm_name": "HDMI 3"
+      },
+      "pipewire": null,
+      "capabilities": {
+        "rates": null,
+        "formats": null,
+        "channels": null
+      },
+      "running": {
+        "value": {
+          "state": "idle"
+        },
+        "source": "Procfs"
+      }
+    },
+    {
+      "id": "alsa_output.usb-SteelSeries_Arctis_Nova_7-00.analog-stereo",
+      "description": "Arctis Nova 7 Analog Stereo",
+      "direction": "playback",
+      "kind": "usb",
+      "alsa": {
+        "card": 2,
+        "card_id": "A7",
+        "device": 0,
+        "card_driver": "USB-Audio",
+        "pcm_name": "USB Audio"
+      },
+      "pipewire": {
+        "object_id": 55,
+        "node_name": "alsa_output.usb-SteelSeries_Arctis_Nova_7-00.analog-stereo",
+        "media_class": "Audio/Sink",
+        "state": "suspended",
+        "is_default": false
+      },
+      "capabilities": {
+        "rates": {
+          "value": {
+            "kind": "discrete",
+            "rates": [
+              48000
+            ]
+          },
+          "source": "Procfs"
+        },
+        "formats": {
+          "value": [
+            "S24_3LE"
+          ],
+          "source": "Procfs"
+        },
+        "channels": {
+          "value": [
+            2
+          ],
+          "source": "Procfs"
+        }
+      },
+      "running": {
+        "value": {
+          "state": "idle"
+        },
+        "source": "Procfs"
+      }
+    },
+    {
+      "id": "alsa_input.usb-SteelSeries_Arctis_Nova_7-00.mono-fallback",
+      "description": "Arctis Nova 7 Mono",
+      "direction": "capture",
+      "kind": "usb",
+      "alsa": {
+        "card": 2,
+        "card_id": "A7",
+        "device": 0,
+        "card_driver": "USB-Audio",
+        "pcm_name": "USB Audio"
+      },
+      "pipewire": {
+        "object_id": 58,
+        "node_name": "alsa_input.usb-SteelSeries_Arctis_Nova_7-00.mono-fallback",
+        "media_class": "Audio/Source",
+        "state": "suspended",
+        "is_default": true
+      },
+      "capabilities": {
+        "rates": {
+          "value": {
+            "kind": "discrete",
+            "rates": [
+              48000
+            ]
+          },
+          "source": "Procfs"
+        },
+        "formats": {
+          "value": [
+            "S16_LE"
+          ],
+          "source": "Procfs"
+        },
+        "channels": {
+          "value": [
+            1
+          ],
+          "source": "Procfs"
+        }
+      },
+      "running": {
+        "value": {
+          "state": "idle"
+        },
+        "source": "Procfs"
+      }
+    }
+  ],
+  "clock": {
+    "value": {
+      "rate": 48000,
+      "allowed_rates": [
+        48000
+      ],
+      "quantum": 1024,
+      "min_quantum": 32,
+      "max_quantum": 2048,
+      "force_rate": 0,
+      "force_quantum": 0
+    },
+    "source": "PipeWire"
+  },
+  "pipewire_version": "1.6.10",
+  "notes": []
+}

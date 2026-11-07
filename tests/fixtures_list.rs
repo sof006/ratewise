@@ -10,6 +10,7 @@ use ratewise::core::model::{
 use ratewise::probe::Probes;
 
 const FIXTURES: &[&str] = &[
+    "arch-desktop",
     "pw-1.2-desktop",
     "pw-0.3-laptop",
     "alsa-only",
@@ -155,4 +156,67 @@ fn no_sound() {
     assert!(snap.devices.is_empty());
     assert_eq!(snap.notes.len(), 2);
     assert!(render_text(&snap).starts_with("No sound devices found."));
+}
+
+/// Real capture: Arch/CachyOS, PipeWire 1.6.10, WirePlumber 0.5.18.
+#[test]
+fn real_arch_desktop() {
+    let snap = snapshot("arch-desktop");
+    assert!(snap.notes.is_empty(), "{:?}", snap.notes);
+    assert_eq!(snap.pipewire_version.as_deref(), Some("1.6.10"));
+    // 4 hardware nodes + 3 HDMI PCMs the active profile doesn't use.
+    assert_eq!(snap.devices.len(), 7);
+
+    // Topping E30 II Lite on a UCM (HiFi) profile, playing at the time of capture.
+    let dac = device(
+        &snap,
+        "alsa_output.usb-Topping_E30_II_Lite-00.HiFi__Headphones__sink",
+    );
+    assert_eq!(dac.kind, DeviceKind::Usb);
+    assert!(dac.pipewire.as_ref().unwrap().is_default);
+    assert_eq!(dac.alsa.as_ref().unwrap().hw_id(), "hw:CARD=Lite,DEV=0");
+    let rates = dac.capabilities.rates.as_ref().unwrap();
+    assert_eq!(rates.source, Source::Procfs);
+    assert_eq!(rates.value.standard_rates().len(), 10);
+    let formats = &dac.capabilities.formats.as_ref().unwrap().value;
+    assert!(formats.contains(&SampleFormat::S32Le));
+    assert!(formats.contains(&SampleFormat::Other("DSD_U32_BE".into())));
+    let Running::Active(p) = &dac.running.as_ref().unwrap().value else {
+        panic!("DAC was playing during capture")
+    };
+    assert_eq!(
+        (p.rate, p.format.clone()),
+        (48_000, Some(SampleFormat::S32Le))
+    );
+    assert_eq!(p.period_frames, Some(512));
+
+    let hdmi = device(&snap, "alsa_output.pci-0000_03_00.1.hdmi-stereo-extra1");
+    assert_eq!(hdmi.kind, DeviceKind::Hdmi);
+    assert_eq!(hdmi.alsa.as_ref().unwrap().hw_id(), "hw:CARD=HDMI,DEV=7");
+    assert_eq!(
+        hdmi.capabilities.rates.as_ref().unwrap(),
+        &ratewise::core::model::Sourced::new(RateSet::range(32_000, 48_000), Source::PipeWire)
+    );
+    for dev in [3, 8, 9] {
+        assert!(
+            device(&snap, &format!("alsa:HDMI:{dev}:playback"))
+                .pipewire
+                .is_none()
+        );
+    }
+
+    let mic = device(
+        &snap,
+        "alsa_input.usb-SteelSeries_Arctis_Nova_7-00.mono-fallback",
+    );
+    assert_eq!(mic.direction, Direction::Capture);
+    assert!(mic.pipewire.as_ref().unwrap().is_default);
+    assert_eq!(mic.capabilities.channels.as_ref().unwrap().value, vec![1]);
+
+    let clock = &snap.clock.as_ref().unwrap().value;
+    assert_eq!(
+        clock.allowed_rates,
+        Some(vec![48_000]),
+        "SPA-JSON string in 1.6"
+    );
 }
