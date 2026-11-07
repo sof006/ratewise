@@ -1,0 +1,6 @@
+00-00: USB Audio : USB Audio : playback 1
+01-03: HDMI 0 : HDMI 0 : playback 1
+01-07: HDMI 1 : HDMI 1 : playback 1
+01-08: HDMI 2 : HDMI 2 : playback 1
+01-09: HDMI 3 : HDMI 3 : playback 1
+02-00: USB Audio : USB Audio : playback 1 : capture 1

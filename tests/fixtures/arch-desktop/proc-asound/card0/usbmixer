@@ -1,0 +1,14 @@
+USB Mixer: usb_id=0x152a8750, ctrlif=0, ctlerr=0
+Card: Topping E30 II Lite at usb-0000:0e:00.4-2, high speed
+  Unit: 10
+    Control: name="E30 II Lite Playback Volume", index=0
+    Info: id=10, control=2, cmask=0x0, channels=1, type="S16"
+    Volume: min=-32512, max=0, dBmin=-12700, dBmax=0
+  Unit: 10
+    Control: name="E30 II Lite Playback Switch", index=0
+    Info: id=10, control=1, cmask=0x0, channels=1, type="INV_BOOLEAN"
+    Volume: min=0, max=1, dBmin=0, dBmax=0
+  Unit: 41
+    Control: name="Topping Internal Clock Validity", index=0
+    Info: id=41, control=2, cmask=0x0, channels=1, type="BOOLEAN"
+    Volume: min=0, max=1, dBmin=0, dBmax=0

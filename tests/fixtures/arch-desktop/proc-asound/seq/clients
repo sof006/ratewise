@@ -1,0 +1,35 @@
+Client info
+  cur  clients : 4
+  peak clients : 20
+  max  clients : 192
+
+Client   0 : "System" [Kernel Legacy]
+  Port   0 : "Timer" (Rwe-) [In/Out]
+    Connecting To: 144:0
+  Port   1 : "Announce" (R-e-) [In]
+    Connecting To: 144:0
+Client  14 : "Midi Through" [Kernel Legacy]
+  Port   0 : "Midi Through Port-0" (RWe-) [In/Out]
+Client 144 : "PipeWire-System" [User Legacy]
+  Port   0 : "input" (rwe-) [In/Out]
+    Connected From: 0:1, 0:0
+  Input pool :
+    Pool size          : 200
+    Cells in use       : 0
+    Peak cells in use  : 2
+    Alloc success      : 6
+    Alloc failures     : 0
+Client 145 : "PipeWire-RT-Event" [User Legacy]
+  Port   0 : "input" (rwe-) [In/Out]
+  Output pool :
+    Pool size          : 682
+    Cells in use       : 0
+    Peak cells in use  : 0
+    Alloc success      : 0
+    Alloc failures     : 0
+  Input pool :
+    Pool size          : 682
+    Cells in use       : 0
+    Peak cells in use  : 0
+    Alloc success      : 0
+    Alloc failures     : 0

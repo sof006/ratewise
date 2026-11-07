@@ -1,0 +1,10 @@
+state: RUNNING
+owner_pid   : 1168
+trigger_time: 1022.692120362
+tstamp      : 2469.282327094
+delay       : 2992
+avail       : 30250
+avail_max   : 31237
+-----
+hw_ptr      : 69435434
+appl_ptr    : 69437952

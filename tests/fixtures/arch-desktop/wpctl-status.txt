@@ -1,0 +1,59 @@
+PipeWire 'pipewire-0' [1.6.10, REDACTED@REDACTED, cookie:936764212]
+ └─ Clients:
+        32. kwin_wayland                        [1.6.10, REDACTED@REDACTED, pid:1088]
+        33. WirePlumber                         [1.6.10, REDACTED@REDACTED, pid:1169]
+        42. WirePlumber [client]                [1.6.10, REDACTED@REDACTED, pid:1169]
+        49. pipewire                            [1.6.10, REDACTED@REDACTED, pid:1402]
+        53. libcanberra                         [1.6.10, REDACTED@REDACTED, pid:1093]
+        54. xdg-desktop-portal-kde              [1.6.10, REDACTED@REDACTED, pid:1461]
+        57. xdg-desktop-portal                  [1.6.10, REDACTED@REDACTED, pid:1390]
+        73.                                     [1.6.10, REDACTED@REDACTED, pid:1093]
+        74. plasmashell                         [1.6.10, REDACTED@REDACTED, pid:1099]
+        75. libcanberra                         [1.6.10, REDACTED@REDACTED, pid:1099]
+        76.                                     [1.6.10, REDACTED@REDACTED, pid:1099]
+        77. WEBRTC VoiceEngine                  [1.6.10, REDACTED@REDACTED, pid:6091]
+        78. discord                             [1.6.10, REDACTED@REDACTED, pid:6180]
+        82. Dolphin                             [1.6.10, REDACTED@REDACTED, pid:8022]
+        84. WEBRTC VoiceEngine                  [1.6.10, REDACTED@REDACTED, pid:6091]
+        85. discord_hardware_mute               [1.6.10, REDACTED@REDACTED, pid:6091]
+        86. Eden                                [1.6.10, REDACTED@REDACTED, pid:8161]
+        87. Google Chrome input                 [1.6.10, REDACTED@REDACTED, pid:5560]
+        90. lichii                              [1.6.10, REDACTED@REDACTED, pid:8161]
+        95. Dolphin                             [1.6.10, REDACTED@REDACTED, pid:8815]
+        96. wpctl                               [1.6.10, REDACTED@REDACTED, pid:12617]
+
+Audio
+ ├─ Devices:
+ │      43. Navi 48 HDMI/DP Audio Controller    [alsa]
+ │      44. Arctis Nova 7                       [alsa]
+ │      45. E30 II Lite                         [alsa]
+ │  
+ ├─ Sinks:
+ │      55. Arctis Nova 7 Analog Stereo         [vol: 0.40]
+ │      56. Navi 48 HDMI/DP Audio Controller Digital Stereo (HDMI 2) [BenQ GW2490E] [vol: 0.40]
+ │  *   59. E30 II Lite Headphones              [vol: 0.70]
+ │  
+ ├─ Sources:
+ │  *   58. Arctis Nova 7 Mono                  [vol: 1.00]
+ │  
+ ├─ Filters:
+ │  
+ └─ Streams:
+        80. Eden                                                        
+             79. output_FR       > E30 II Lite:playback_FR	[active]
+             92. output_FL       > E30 II Lite:playback_FL	[active]
+
+Video
+ ├─ Devices:
+ │  
+ ├─ Sinks:
+ │  
+ ├─ Sources:
+ │  
+ ├─ Filters:
+ │  
+ └─ Streams:
+
+Settings
+ └─ Default Configured Devices:
+         0. Audio/Sink    alsa_output.usb-Topping_E30_II_Lite-00.HiFi__Headphones__sink

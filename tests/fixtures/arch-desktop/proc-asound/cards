@@ -1,0 +1,6 @@
+ 0 [Lite           ]: USB-Audio - E30 II Lite
+                      Topping E30 II Lite at usb-0000:0e:00.4-2, high speed
+ 1 [HDMI           ]: HDA-Intel - HDA ATI HDMI
+                      HDA ATI HDMI at 0xf6ba0000 irq 133
+ 2 [A7             ]: USB-Audio - Arctis Nova 7
+                      SteelSeries Arctis Nova 7 at usb-0000:0b:00.0-9, full speed

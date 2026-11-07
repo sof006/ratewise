@@ -1,0 +1,18 @@
+USB Mixer: usb_id=0x10382202, ctrlif=0, ctlerr=0
+Card: SteelSeries Arctis Nova 7 at usb-0000:0b:00.0-9, full speed
+  Unit: 2
+    Control: name="Mic Capture Volume", index=0
+    Info: id=2, control=2, cmask=0x0, channels=1, type="S16"
+    Volume: min=-21248, max=0, dBmin=-8300, dBmax=0
+  Unit: 2
+    Control: name="Mic Capture Switch", index=0
+    Info: id=2, control=1, cmask=0x0, channels=1, type="INV_BOOLEAN"
+    Volume: min=0, max=1, dBmin=0, dBmax=0
+  Unit: 5
+    Control: name="PCM Playback Volume", index=0
+    Info: id=5, control=2, cmask=0x0, channels=1, type="S16"
+    Volume: min=-19712, max=0, dBmin=-7700, dBmax=0
+  Unit: 5
+    Control: name="PCM Playback Switch", index=0
+    Info: id=5, control=1, cmask=0x0, channels=1, type="INV_BOOLEAN"
+    Volume: min=0, max=1, dBmin=0, dBmax=0
