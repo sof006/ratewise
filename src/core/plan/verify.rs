@@ -96,6 +96,15 @@ pub enum Expect {
         description: String,
         format: SampleFormat,
     },
+    /// A Bluetooth card's active profile.
+    BluetoothProfile {
+        /// The card's `device.name`.
+        card: String,
+        description: String,
+        profile: String,
+        /// How to show the profile, e.g. "High quality (LDAC)".
+        label: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -177,6 +186,49 @@ fn check(e: &Expect, snap: &Snapshot) -> Check {
                 None => (false, "unknown".into()),
             },
         ),
+        Expect::BluetoothProfile {
+            card,
+            description,
+            profile,
+            label,
+        } => {
+            let what = format!("{description} profile");
+            let bt = snap
+                .devices
+                .iter()
+                .filter_map(|d| d.bluetooth.as_ref())
+                .find(|b| b.card_name == *card);
+            let (got, outcome) = match bt {
+                None => (
+                    None,
+                    Outcome::Unknown("the device isn't connected now".into()),
+                ),
+                Some(b) => {
+                    let got = b
+                        .active()
+                        .map(crate::core::bluetooth::profile_label)
+                        .or_else(|| b.profile.clone());
+                    if b.profile.as_deref() == Some(profile.as_str()) {
+                        (got, Outcome::Ok)
+                    } else {
+                        (
+                            got,
+                            Outcome::Differs(
+                                "the headset or the Bluetooth adapter refused it, or WirePlumber \
+                                 switched back (for example when a program opened the microphone)"
+                                    .into(),
+                            ),
+                        )
+                    }
+                }
+            };
+            Check {
+                what,
+                want: label.clone(),
+                got,
+                outcome,
+            }
+        }
     }
 }
 
@@ -267,10 +319,12 @@ mod tests {
                 capabilities: Capabilities::default(),
                 running: Some(Sourced::new(running, Source::Procfs)),
                 kernel_probe: None,
+                bluetooth: None,
             }],
             clock: Some(Sourced::new(clock, Source::PipeWire)),
             pipewire_version: None,
             stack: crate::core::stack::detect(None, &Default::default(), false),
+            wireplumber: Default::default(),
             notes: vec![],
         }
     }

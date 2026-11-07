@@ -4,7 +4,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::core::model::{ClockSettings, Direction, FrameRange, RateSet, Running, SampleFormat};
+use crate::core::model::{
+    ClockSettings, Direction, FrameRange, RateSet, Running, SampleFormat, WirePlumberSettings,
+};
 
 /// One PCM device node probed with `HW_REFINE`. Also the `kernel.json` fixture format.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -117,6 +119,34 @@ pub struct PwDump {
     pub clock: Option<ClockSettings>,
     pub default_sink: Option<String>,
     pub default_source: Option<String>,
+    /// Bluetooth cards (`device.api` = `bluez5`), including ones whose profile is off and
+    /// so have no nodes.
+    pub bluez_cards: Vec<PwBluezCard>,
+    /// WirePlumber 0.5's settings (`sm-settings` metadata).
+    pub wireplumber: WirePlumberSettings,
+}
+
+/// A Bluetooth card and its profiles.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PwBluezCard {
+    pub id: u32,
+    /// `device.name`, e.g. `bluez_card.00_11_22_33_44_55`.
+    pub name: String,
+    pub description: Option<String>,
+    pub profiles: Vec<PwProfile>,
+    /// The active profile (`Profile` param).
+    pub profile: Option<PwProfile>,
+}
+
+/// One `EnumProfile` or `Profile` entry.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PwProfile {
+    pub index: u32,
+    pub name: String,
+    pub description: Option<String>,
+    /// `available` is "yes", "no" or "unknown"; only "no" counts as unavailable.
+    pub available: bool,
+    pub priority: u32,
 }
 
 /// An audio node, with missing props filled in from its parent device.
@@ -133,6 +163,10 @@ pub struct PwNode {
     pub alsa_device: Option<u32>,
     pub alsa_path: Option<String>,
     pub profile_name: Option<String>,
+    /// The parent device's object id.
+    pub device_id: Option<u32>,
+    /// `api.bluez5.codec`, e.g. `ldac`.
+    pub bluez_codec: Option<String>,
     pub enum_formats: Vec<PwFormat>,
     pub current_format: Option<PwFormat>,
 }

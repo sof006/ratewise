@@ -15,6 +15,15 @@ Outputs
     kernel    probe failed: couldn't open the device (No such device (os error 19))
     id        alsa:PCH:3:playback
     alsa      hw:CARD=PCH,DEV=3
+  Bluetooth Headset — Bluetooth
+    running   idle  [from PipeWire]
+    rates     16 kHz  [from PipeWire]
+    formats   S16_LE (16-bit)  [from PipeWire]
+    channels  1  [from PipeWire]
+    mode      Headset (with microphone) · mSBC  [from PipeWire]
+    codecs    AAC, LDAC, SBC
+    headset   CVSD, mSBC
+    id        bluez_output.00_00_00_00_00_03.headset-head-unit
 
 Inputs
   Built-in Audio Analog Stereo — built-in, default
@@ -25,6 +34,15 @@ Inputs
     kernel    no permission to open it in /dev/snd. Are you in the `audio` group?
     id        alsa_input.pci-0000_00_1f.3.analog-stereo
     alsa      hw:CARD=PCH,DEV=0
+  Bluetooth Headset — Bluetooth
+    running   idle  [from PipeWire]
+    rates     16 kHz  [from PipeWire]
+    formats   S16_LE (16-bit)  [from PipeWire]
+    channels  1  [from PipeWire]
+    mode      Headset (with microphone) · mSBC  [from PipeWire]
+    codecs    AAC, LDAC, SBC
+    headset   CVSD, mSBC
+    id        bluez_input.00_00_00_00_00_03.headset-head-unit
 
 Sound server: PipeWire 0.3.48 · WirePlumber 0.4.8 · pipewire-pulse
 PipeWire clock: default 48 kHz · allowed 48 kHz · quantum 1024 (max 2048)  [from PipeWire]

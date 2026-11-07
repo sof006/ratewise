@@ -72,7 +72,7 @@ Set the sample format of D50s Analog Stereo to S32_LE (32-bit) (saved).
 
 Steps
   1. Create ~/.config/wireplumber/wireplumber.conf.d/60-ratewise.conf
-     WirePlumber rules for per-device settings.
+     WirePlumber settings and per-device rules.
        @@ -0,0 +1,15 @@
        +# Written by Ratewise. It regenerates this file on every `ratewise set --save`,
        +# so edits here are lost. `ratewise reset` removes it.
@@ -104,7 +104,7 @@ Set the period size of D50s Analog Stereo to 1024 frames (saved).
 
 Steps
   1. Update ~/.config/wireplumber/wireplumber.conf.d/60-ratewise.conf
-     WirePlumber rules for per-device settings.
+     WirePlumber settings and per-device rules.
        @@ -10,4 +10,5 @@
               update-props = {
                 audio.format = "S32LE"
@@ -126,7 +126,7 @@ Keep Built-in Audio Analog Stereo open when idle (no suspend) (saved).
 
 Steps
   1. Update ~/.config/wireplumber/wireplumber.conf.d/60-ratewise.conf
-     WirePlumber rules for per-device settings.
+     WirePlumber settings and per-device rules.
        @@ -3,4 +3,15 @@
         monitor.alsa.rules = [
           {

@@ -39,7 +39,14 @@ Outputs
     rates     48 kHz  [from PipeWire]
     formats   S16_LE (16-bit)  [from PipeWire]
     channels  2  [from PipeWire]
+    mode      High quality · AAC  [from PipeWire]
+    codecs    LDAC, AAC, SBC-XQ, SBC
+    headset   mSBC, CVSD
     id        bluez_output.00_00_00_00_00_01.1
+  Bluetooth Speaker — Bluetooth
+    mode      Off  [from PipeWire]
+    codecs    AAC, SBC
+    id        bluez_card.00_00_00_00_00_02
 
 Inputs
   Built-in Audio Analog Stereo — built-in, default

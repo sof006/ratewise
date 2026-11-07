@@ -7,12 +7,13 @@
 use std::collections::HashSet;
 
 use crate::core::facts::{
-    KernelOutcome, KernelPcmProbe, ProcAsound, ProcCard, ProcPcm, PwDump, PwFormat, PwNode,
+    KernelOutcome, KernelPcmProbe, ProcAsound, ProcCard, ProcPcm, PwBluezCard, PwDump, PwFormat,
+    PwNode,
 };
 use crate::core::model::{
-    AlsaPcm, Capabilities, Device, DeviceKind, Direction, KernelProbeStatus, PipeWireNode,
-    ProbeNote, RateSet, Running, SCHEMA_VERSION, Snapshot, Source, Sourced, StackReport,
-    StreamParams,
+    AlsaPcm, Bluetooth, BluetoothProfile, Capabilities, Device, DeviceKind, Direction,
+    KernelProbeStatus, PipeWireNode, ProbeNote, RateSet, Running, SCHEMA_VERSION, Snapshot, Source,
+    Sourced, StackReport, StreamParams,
 };
 
 /// Everything the probes found. Any source may be missing.
@@ -46,6 +47,14 @@ pub fn merge(facts: Facts<'_>, notes: Vec<ProbeNote>) -> Snapshot {
                 claimed.insert((card.number, pcm.device, pcm.direction));
             }
             devices.push(device_from_node(node, direction, pcm, pw));
+        }
+        // A Bluetooth card whose profile is off has no nodes. List it anyway, so it can be
+        // switched back on.
+        for card in &pw.bluez_cards {
+            let has_node = pw.nodes.iter().any(|n| n.device_id == Some(card.id));
+            if !has_node {
+                devices.push(device_from_bluez_card(card));
+            }
         }
     }
 
@@ -86,6 +95,7 @@ pub fn merge(facts: Facts<'_>, notes: Vec<ProbeNote>) -> Snapshot {
             .map(|c| Sourced::new(c, Source::PipeWire)),
         pipewire_version: pw.and_then(|p| p.core_version.clone()),
         stack,
+        wireplumber: pw.map(|p| p.wireplumber.clone()).unwrap_or_default(),
         notes,
     }
 }
@@ -214,6 +224,63 @@ fn device_from_node(
         capabilities,
         running,
         kernel_probe: None,
+        bluetooth: bluetooth(node, pw),
+    }
+}
+
+/// Bluetooth details for a bluez node, from its parent card.
+fn bluetooth(node: &PwNode, pw: &PwDump) -> Option<Bluetooth> {
+    if node.device_api.as_deref() != Some("bluez5") {
+        return None;
+    }
+    let card = pw
+        .bluez_cards
+        .iter()
+        .find(|c| Some(c.id) == node.device_id)?;
+    let mut bt = bluetooth_from_card(card);
+    bt.codec = node.bluez_codec.clone();
+    Some(bt)
+}
+
+fn bluetooth_from_card(card: &PwBluezCard) -> Bluetooth {
+    Bluetooth {
+        card_name: card.name.clone(),
+        card_object_id: card.id,
+        profile: card.profile.as_ref().map(|p| p.name.clone()),
+        codec: None,
+        profiles: card
+            .profiles
+            .iter()
+            .map(|p| {
+                let description = p.description.clone().unwrap_or_else(|| p.name.clone());
+                BluetoothProfile {
+                    index: p.index,
+                    codec: crate::core::bluetooth::profile_codec(&p.name, &description),
+                    name: p.name.clone(),
+                    description,
+                    available: p.available,
+                    priority: p.priority,
+                }
+            })
+            .collect(),
+    }
+}
+
+fn device_from_bluez_card(card: &PwBluezCard) -> Device {
+    Device {
+        id: card.name.clone(),
+        description: card
+            .description
+            .clone()
+            .unwrap_or_else(|| card.name.clone()),
+        direction: Direction::Playback,
+        kind: DeviceKind::Bluetooth,
+        alsa: None,
+        pipewire: None,
+        capabilities: Capabilities::default(),
+        running: None,
+        kernel_probe: None,
+        bluetooth: Some(bluetooth_from_card(card)),
     }
 }
 
@@ -228,6 +295,7 @@ fn device_from_pcm(card: &ProcCard, pcm: &ProcPcm) -> Device {
         capabilities: usb_capabilities(card, pcm),
         running: pcm.running.clone().map(|r| Sourced::new(r, Source::Procfs)),
         kernel_probe: None,
+        bluetooth: None,
     }
 }
 

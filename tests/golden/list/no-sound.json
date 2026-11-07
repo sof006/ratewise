@@ -12,6 +12,10 @@
     "jack_running": false,
     "systemd_user_session": false
   },
+  "wireplumber": {
+    "headset_autoswitch": null,
+    "headset_autoswitch_saved": null
+  },
   "notes": [
     {
       "source": "Procfs",

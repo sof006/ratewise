@@ -8,6 +8,9 @@ command line, in one self-contained AppImage.
   it supports.
 - Change the rate, bit depth, buffer size (quantum), period size, headroom, idle
   suspend and resampler quality, per device or for everything.
+- For Bluetooth headphones and headsets on PipeWire: switch between high quality and
+  headset (microphone) mode, pick the codec (LDAC, aptX, AAC, SBC, …), set LDAC's
+  bitrate, and choose whether calls switch the headset automatically.
 - Every change is shown as a plan with file diffs first, is backed up, and can be
   reverted. Ratewise only writes your own config files and never needs root.
 
@@ -33,6 +36,7 @@ The same AppImage is the CLI:
 ./Ratewise-x86_64.AppImage list
 ./Ratewise-x86_64.AppImage plan rate 96k --device e30 --save
 ./Ratewise-x86_64.AppImage set quantum 256 --save --restart
+./Ratewise-x86_64.AppImage set profile ldac --device headphones
 ./Ratewise-x86_64.AppImage revert
 ./Ratewise-x86_64.AppImage doctor
 ```

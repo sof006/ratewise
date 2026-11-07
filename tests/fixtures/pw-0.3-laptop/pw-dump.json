@@ -111,5 +111,191 @@
         ]
       }
     }
+  },
+  {
+    "id": 57,
+    "type": "PipeWire:Interface:Device",
+    "version": 3,
+    "permissions": [
+      "r",
+      "w",
+      "x",
+      "m"
+    ],
+    "info": {
+      "props": {
+        "api.bluez5.address": "00:00:00:00:00:03",
+        "api.bluez5.connection": "connected",
+        "device.api": "bluez5",
+        "device.bus": "bluetooth",
+        "device.description": "Bluetooth Headset",
+        "device.form-factor": "headset",
+        "device.name": "bluez_card.00_00_00_00_00_03",
+        "media.class": "Audio/Device"
+      },
+      "params": {
+        "EnumProfile": [
+          {
+            "index": 0,
+            "name": "off",
+            "description": "Off",
+            "available": "yes",
+            "priority": 0,
+            "classes": []
+          },
+          {
+            "index": 131072,
+            "name": "a2dp-sink",
+            "description": "High Fidelity Playback (A2DP Sink)",
+            "available": "yes",
+            "priority": 16,
+            "classes": [
+              "Audio/Sink"
+            ]
+          },
+          {
+            "index": 131076,
+            "name": "a2dp-sink-aac",
+            "description": "High Fidelity Playback (A2DP Sink, codec AAC)",
+            "available": "yes",
+            "priority": 21,
+            "classes": [
+              "Audio/Sink"
+            ]
+          },
+          {
+            "index": 131080,
+            "name": "a2dp-sink-ldac",
+            "description": "High Fidelity Playback (A2DP Sink, codec LDAC)",
+            "available": "yes",
+            "priority": 26,
+            "classes": [
+              "Audio/Sink"
+            ]
+          },
+          {
+            "index": 131073,
+            "name": "a2dp-sink-sbc",
+            "description": "High Fidelity Playback (A2DP Sink, codec SBC)",
+            "available": "yes",
+            "priority": 18,
+            "classes": [
+              "Audio/Sink"
+            ]
+          },
+          {
+            "index": 196608,
+            "name": "headset-head-unit",
+            "description": "Headset Head Unit (HSP/HFP)",
+            "available": "yes",
+            "priority": 1,
+            "classes": [
+              "Audio/Sink",
+              "Audio/Source"
+            ]
+          },
+          {
+            "index": 196864,
+            "name": "headset-head-unit-cvsd",
+            "description": "Headset Head Unit (HSP/HFP, codec CVSD)",
+            "available": "yes",
+            "priority": 1,
+            "classes": [
+              "Audio/Sink",
+              "Audio/Source"
+            ]
+          },
+          {
+            "index": 196865,
+            "name": "headset-head-unit-msbc",
+            "description": "Headset Head Unit (HSP/HFP, codec mSBC)",
+            "available": "yes",
+            "priority": 2,
+            "classes": [
+              "Audio/Sink",
+              "Audio/Source"
+            ]
+          }
+        ],
+        "Profile": [
+          {
+            "index": 196865,
+            "name": "headset-head-unit-msbc",
+            "description": "Headset Head Unit (HSP/HFP, codec mSBC)",
+            "available": "yes",
+            "priority": 2,
+            "classes": [
+              "Audio/Sink",
+              "Audio/Source"
+            ],
+            "save": false
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": 58,
+    "type": "PipeWire:Interface:Node",
+    "version": 3,
+    "info": {
+      "state": "suspended",
+      "props": {
+        "api.bluez5.address": "00:00:00:00:00:03",
+        "api.bluez5.codec": "msbc",
+        "api.bluez5.profile": "headset-head-unit",
+        "device.api": "bluez5",
+        "device.id": "57",
+        "media.class": "Audio/Sink",
+        "node.description": "Bluetooth Headset",
+        "node.name": "bluez_output.00_00_00_00_00_03.headset-head-unit"
+      },
+      "params": {
+        "EnumFormat": [
+          {
+            "mediaType": "audio",
+            "mediaSubtype": "raw",
+            "format": "S16LE",
+            "rate": 16000,
+            "channels": 1,
+            "position": [
+              "MONO"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": 59,
+    "type": "PipeWire:Interface:Node",
+    "version": 3,
+    "info": {
+      "state": "suspended",
+      "props": {
+        "api.bluez5.address": "00:00:00:00:00:03",
+        "api.bluez5.codec": "msbc",
+        "api.bluez5.profile": "headset-head-unit",
+        "device.api": "bluez5",
+        "device.id": "57",
+        "media.class": "Audio/Source",
+        "node.description": "Bluetooth Headset",
+        "node.name": "bluez_input.00_00_00_00_00_03.headset-head-unit"
+      },
+      "params": {
+        "EnumFormat": [
+          {
+            "mediaType": "audio",
+            "mediaSubtype": "raw",
+            "format": "S16LE",
+            "rate": 16000,
+            "channels": 1,
+            "position": [
+              "MONO"
+            ]
+          }
+        ]
+      }
+    }
   }
 ]

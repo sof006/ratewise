@@ -59,6 +59,35 @@
     ]
   },
   {
+    "id": 33,
+    "type": "PipeWire:Interface:Metadata",
+    "version": 3,
+    "permissions": [
+      "r",
+      "w",
+      "x",
+      "m"
+    ],
+    "props": {
+      "metadata.name": "sm-settings",
+      "object.serial": 33
+    },
+    "metadata": [
+      {
+        "subject": 0,
+        "key": "bluetooth.autoswitch-to-headset-profile",
+        "type": "Spa:String:JSON",
+        "value": true
+      },
+      {
+        "subject": 0,
+        "key": "bluetooth.use-persistent-storage",
+        "type": "Spa:String:JSON",
+        "value": true
+      }
+    ]
+  },
+  {
     "id": 40,
     "type": "PipeWire:Interface:Client",
     "version": 3,
@@ -141,7 +170,12 @@
     "id": 48,
     "type": "PipeWire:Interface:Device",
     "version": 3,
-    "permissions": [ "r", "w", "x", "m" ],
+    "permissions": [
+      "r",
+      "w",
+      "x",
+      "m"
+    ],
     "info": {
       "props": {
         "api.bluez5.address": "00:00:00:00:00:01",
@@ -152,6 +186,159 @@
         "device.form-factor": "headphone",
         "device.name": "bluez_card.00_00_00_00_00_01",
         "media.class": "Audio/Device"
+      },
+      "params": {
+        "EnumProfile": [
+          {
+            "index": 0,
+            "name": "off",
+            "description": "Off",
+            "available": "yes",
+            "priority": 0,
+            "classes": []
+          },
+          {
+            "index": 131080,
+            "name": "a2dp-sink",
+            "description": "High Fidelity Playback (A2DP Sink, codec LDAC)",
+            "available": "yes",
+            "priority": 26,
+            "classes": [
+              "Audio/Sink"
+            ]
+          },
+          {
+            "index": 131076,
+            "name": "a2dp-sink-aac",
+            "description": "High Fidelity Playback (A2DP Sink, codec AAC)",
+            "available": "yes",
+            "priority": 21,
+            "classes": [
+              "Audio/Sink"
+            ]
+          },
+          {
+            "index": 131074,
+            "name": "a2dp-sink-sbc_xq",
+            "description": "High Fidelity Playback (A2DP Sink, codec SBC-XQ)",
+            "available": "yes",
+            "priority": 19,
+            "classes": [
+              "Audio/Sink"
+            ]
+          },
+          {
+            "index": 131073,
+            "name": "a2dp-sink-sbc",
+            "description": "High Fidelity Playback (A2DP Sink, codec SBC)",
+            "available": "yes",
+            "priority": 18,
+            "classes": [
+              "Audio/Sink"
+            ]
+          },
+          {
+            "index": 196865,
+            "name": "headset-head-unit",
+            "description": "Headset Head Unit (HSP/HFP, codec mSBC)",
+            "available": "yes",
+            "priority": 2,
+            "classes": [
+              "Audio/Sink",
+              "Audio/Source"
+            ]
+          },
+          {
+            "index": 196864,
+            "name": "headset-head-unit-cvsd",
+            "description": "Headset Head Unit (HSP/HFP, codec CVSD)",
+            "available": "yes",
+            "priority": 1,
+            "classes": [
+              "Audio/Sink",
+              "Audio/Source"
+            ]
+          }
+        ],
+        "Profile": [
+          {
+            "index": 131076,
+            "name": "a2dp-sink-aac",
+            "description": "High Fidelity Playback (A2DP Sink, codec AAC)",
+            "available": "yes",
+            "priority": 21,
+            "classes": [
+              "Audio/Sink"
+            ],
+            "save": false
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": 49,
+    "type": "PipeWire:Interface:Device",
+    "version": 3,
+    "permissions": [
+      "r",
+      "w",
+      "x",
+      "m"
+    ],
+    "info": {
+      "props": {
+        "api.bluez5.address": "00:00:00:00:00:02",
+        "api.bluez5.connection": "connected",
+        "device.api": "bluez5",
+        "device.bus": "bluetooth",
+        "device.description": "Bluetooth Speaker",
+        "device.form-factor": "speaker",
+        "device.name": "bluez_card.00_00_00_00_00_02",
+        "media.class": "Audio/Device"
+      },
+      "params": {
+        "EnumProfile": [
+          {
+            "index": 0,
+            "name": "off",
+            "description": "Off",
+            "available": "yes",
+            "priority": 0,
+            "classes": []
+          },
+          {
+            "index": 131076,
+            "name": "a2dp-sink",
+            "description": "High Fidelity Playback (A2DP Sink, codec AAC)",
+            "available": "yes",
+            "priority": 21,
+            "classes": [
+              "Audio/Sink"
+            ]
+          },
+          {
+            "index": 131073,
+            "name": "a2dp-sink-sbc",
+            "description": "High Fidelity Playback (A2DP Sink, codec SBC)",
+            "available": "yes",
+            "priority": 18,
+            "classes": [
+              "Audio/Sink"
+            ]
+          }
+        ],
+        "Profile": [
+          {
+            "index": 0,
+            "name": "off",
+            "description": "Off",
+            "available": "yes",
+            "priority": 0,
+            "classes": [],
+            "save": false
+          }
+        ]
       }
     }
   },

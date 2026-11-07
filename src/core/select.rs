@@ -117,6 +117,7 @@ mod tests {
             capabilities: Capabilities::default(),
             running: None,
             kernel_probe: None,
+            bluetooth: None,
         }
     }
 

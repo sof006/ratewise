@@ -4,7 +4,7 @@
 //! one plan. Picking a value that matches what's already in effect drops the edit.
 
 use crate::core::model::{ClockSettings, Device, SampleFormat};
-use crate::core::settings::{Change, SavedConfig, Value};
+use crate::core::settings::{Change, LdacQuality, SavedConfig, Value};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Edit {
@@ -76,6 +76,14 @@ fn is_noop(
     match change {
         Change::ForceRate(n) => clock.and_then(|c| c.force_rate).unwrap_or(0) == *n,
         Change::ForceQuantum(n) => clock.and_then(|c| c.force_quantum).unwrap_or(0) == *n,
+        // Never saved, so compare with the profile in use.
+        Change::BluetoothProfile(want) => device
+            .and_then(|d| d.bluetooth.as_ref())
+            .and_then(|bt| {
+                let p = crate::core::bluetooth::resolve(bt, want).ok()?;
+                Some(bt.profile.as_deref() == Some(p.name.as_str()))
+            })
+            .unwrap_or(false),
         _ if saved.with(change, device) == *saved => true,
         Change::Rate(Value::Set(n)) if device.is_none() => {
             running(g.rate.is_some(), c(|c| c.rate), *n)
@@ -105,9 +113,10 @@ fn number(value: &str) -> Option<Value<u32>> {
 }
 
 /// A per-device option picked in the window: `kind` is "rate", "format", "period",
-/// "headroom" or "suspend".
+/// "headroom", "suspend" or "profile" (a Bluetooth profile name).
 pub fn device_change(kind: &str, value: &str) -> Option<Change> {
     Some(match kind {
+        "profile" if !value.is_empty() => Change::BluetoothProfile(value.to_string()),
         "rate" => Change::Rate(number(value)?),
         "format" => Change::Format(match value {
             "default" => Value::Default,
@@ -118,6 +127,10 @@ pub fn device_change(kind: &str, value: &str) -> Option<Change> {
         "suspend" => Change::Suspend(match value {
             "off" => Value::Set(false),
             _ => Value::Default,
+        }),
+        "ldac" => Change::LdacQuality(match value {
+            "default" => Value::Default,
+            v => Value::Set(LdacQuality::parse(v)?),
         }),
         _ => return None,
     })
@@ -160,6 +173,12 @@ pub fn global_change(kind: &str, value: &str, allowed: &[u32]) -> Option<Change>
         "format" => Change::Format(match value {
             "default" => Value::Default,
             v => Value::Set(SampleFormat::from_alsa(v)),
+        }),
+        "headset-autoswitch" => Change::HeadsetAutoswitch(match value {
+            "on" => Value::Set(true),
+            "off" => Value::Set(false),
+            "default" => Value::Default,
+            _ => return None,
         }),
         _ => return None,
     })
@@ -249,6 +268,14 @@ mod tests {
             Some(Change::Suspend(Value::Set(false)))
         );
         assert_eq!(device_change("period", "lots"), None);
+        assert_eq!(
+            device_change("ldac", "hq"),
+            Some(Change::LdacQuality(Value::Set(LdacQuality::Hq)))
+        );
+        assert_eq!(
+            global_change("headset-autoswitch", "off", &[]),
+            Some(Change::HeadsetAutoswitch(Value::Set(false)))
+        );
         assert_eq!(
             global_change("force-rate", "off", &[]),
             Some(Change::ForceRate(0))

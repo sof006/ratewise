@@ -11,7 +11,7 @@ Steps
        +    default.clock.quantum = 256
        +}
   2. Create ~/.config/wireplumber/wireplumber.conf.d/60-ratewise.conf
-     WirePlumber rules for per-device settings.
+     WirePlumber settings and per-device rules.
        @@ -0,0 +1,15 @@
        +# Written by Ratewise. It regenerates this file on every `ratewise set --save`,
        +# so edits here are lost. `ratewise reset` removes it.

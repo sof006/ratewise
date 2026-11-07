@@ -48,6 +48,15 @@ export struct DeviceView {
     headroom-why: string,
     suspend-opts: [Opt],
     suspend-why: string,
+    // Bluetooth devices get a Bluetooth tab instead of sample rate and format.
+    bluetooth: bool,
+    bt-mode-opts: [Opt],
+    bt-codec-opts: [Opt],
+    // Why the profile can't be switched; empty if it can.
+    bt-why: string,
+    // Shown only for devices that offer LDAC.
+    ldac-opts: [Opt],
+    ldac-why: string,
     raw: string,
 }
 
@@ -73,6 +82,10 @@ export struct ClockView {
     force-why: string,
     resample-opts: [Opt],
     resample-why: string,
+    // Bluetooth headset switching; shown when there's a Bluetooth device.
+    headset-show: bool,
+    headset-opts: [Opt],
+    headset-why: string,
     saved: [KV],
     can-reset: bool,
 }
@@ -217,6 +230,19 @@ component NavRow inherits Rectangle {
     }
 }
 
+// Global, but also shown on each Bluetooth device's tab.
+component HeadsetCard inherits Card {
+    in property <ClockView> clock;
+    callback picked(string);
+    title: "Switch headsets for calls";
+    subtitle: "When a program opens a Bluetooth headset's microphone, WirePlumber can switch the headset to headset mode, and back afterwards. Applies to every Bluetooth device.";
+    if root.clock.headset-opts.length > 0: Segmented {
+        opts: root.clock.headset-opts;
+        picked(v) => { root.picked(v); }
+    }
+    if root.clock.headset-why != "": Why { text: root.clock.headset-why; }
+}
+
 component DevicePage inherits TabWidget {
     in property <DeviceView> device;
     in property <ClockView> clock;
@@ -290,28 +316,69 @@ component DevicePage inherits TabWidget {
         }
     }
     Tab {
-        title: "Sample rate & format";
+        title: root.device.bluetooth ? "Bluetooth" : "Sample rate & format";
         Page {
-            if root.device.edit-why != "": FactLine {
-                fact: { text: root.device.edit-why, level: "info" };
-            }
-            Card {
-                title: "Sample rate";
-                subtitle: "The rate this device runs at. Only rates it supports are offered.";
-                if root.device.rate-opts.length > 0: Segmented {
-                    opts: root.device.rate-opts;
-                    picked(v) => { root.device-option("rate", v); }
+            if root.device.bluetooth: VerticalLayout {
+                spacing: 16px;
+                if root.device.bt-why != "": FactLine {
+                    fact: { text: root.device.bt-why, level: "info" };
                 }
-                if root.device.rate-why != "": Why { text: root.device.rate-why; }
-            }
-            Card {
-                title: "Sample format";
-                subtitle: "Bit depth sent to the hardware.";
-                if root.device.format-opts.length > 0: Segmented {
-                    opts: root.device.format-opts;
-                    picked(v) => { root.device-option("format", v); }
+                Card {
+                    title: "Mode";
+                    subtitle: "High quality is for music and video. Headset turns the microphone on, but sound drops to phone-call quality.";
+                    if root.device.bt-mode-opts.length > 0: Segmented {
+                        opts: root.device.bt-mode-opts;
+                        picked(v) => { root.device-option("profile", v); }
+                    }
                 }
-                if root.device.format-why != "": Why { text: root.device.format-why; }
+                Card {
+                    title: "Codec";
+                    subtitle: "How sound is compressed over Bluetooth. Only codecs both the device and your computer support are offered. The sample rate and format follow from the codec.";
+                    if root.device.bt-codec-opts.length > 0: Segmented {
+                        opts: root.device.bt-codec-opts;
+                        picked(v) => { root.device-option("profile", v); }
+                    }
+                    Why {
+                        text: "Use Apply live to switch mode or codec. WirePlumber remembers the choice for this device.";
+                    }
+                }
+                if root.device.ldac-opts.length > 0 || root.device.ldac-why != "": Card {
+                    title: "LDAC quality";
+                    subtitle: "LDAC's bitrate. Higher sounds better but needs a strong connection. Saved, and used the next time the device connects.";
+                    if root.device.ldac-opts.length > 0: Segmented {
+                        opts: root.device.ldac-opts;
+                        picked(v) => { root.device-option("ldac", v); }
+                    }
+                    if root.device.ldac-why != "": Why { text: root.device.ldac-why; }
+                }
+                if root.clock.headset-show: HeadsetCard {
+                    clock: root.clock;
+                    picked(v) => { root.clock-option("headset-autoswitch", v); }
+                }
+            }
+            if !root.device.bluetooth: VerticalLayout {
+                spacing: 16px;
+                if root.device.edit-why != "": FactLine {
+                    fact: { text: root.device.edit-why, level: "info" };
+                }
+                Card {
+                    title: "Sample rate";
+                    subtitle: "The rate this device runs at. Only rates it supports are offered.";
+                    if root.device.rate-opts.length > 0: Segmented {
+                        opts: root.device.rate-opts;
+                        picked(v) => { root.device-option("rate", v); }
+                    }
+                    if root.device.rate-why != "": Why { text: root.device.rate-why; }
+                }
+                Card {
+                    title: "Sample format";
+                    subtitle: "Bit depth sent to the hardware.";
+                    if root.device.format-opts.length > 0: Segmented {
+                        opts: root.device.format-opts;
+                        picked(v) => { root.device-option("format", v); }
+                    }
+                    if root.device.format-why != "": Why { text: root.device.format-why; }
+                }
             }
         }
     }
@@ -460,6 +527,10 @@ component GlobalPage inherits Page {
                 picked(v) => { root.clock-option("resample", v); }
             }
             if root.clock.resample-why != "": Why { text: root.clock.resample-why; }
+        }
+        if root.clock.headset-show: HeadsetCard {
+            clock: root.clock;
+            picked(v) => { root.clock-option("headset-autoswitch", v); }
         }
         Card {
             title: "Testing (live only)";

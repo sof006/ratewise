@@ -14,7 +14,7 @@ use ratewise::core::plan::{
     render_plan,
 };
 use ratewise::core::select::select;
-use ratewise::core::settings::{Change, Mode, SavedConfig, Value};
+use ratewise::core::settings::{Change, LdacQuality, Mode, SavedConfig, Value};
 use ratewise::probe::Probes;
 
 const SYSTEM_PULSE: &str =
@@ -37,7 +37,7 @@ impl World {
             paths: Paths::new("/home/user".into(), None, None),
             saved: SavedConfig::default(),
             files: BTreeMap::new(),
-            tools: ["pw-metadata", "systemctl", "wpctl"]
+            tools: ["pw-metadata", "systemctl", "wpctl", "pw-cli"]
                 .map(String::from)
                 .to_vec(),
             pulse_override: false,
@@ -139,6 +139,9 @@ fn save() -> Option<Mode> {
 
 const D50S: &str = "alsa_output.usb-Topping_D50s-00.analog-stereo";
 const BUILTIN_SINK: &str = "alsa_output.pci-0000_00_1f.3.analog-stereo";
+const HEADPHONES: &str = "bluez_output.00_00_00_00_00_01.1";
+const SPEAKER: &str = "bluez_card.00_00_00_00_00_02";
+const OLD_HEADSET: &str = "bluez_output.00_00_00_00_00_03.headset-head-unit";
 
 #[test]
 fn pipewire_1_2_wireplumber_0_5() {
@@ -722,10 +725,259 @@ fn a_batch_of_edits_is_one_plan_with_one_restart() {
     let none = plan::plan_batch(&w.ctx(), &[], Mode::Save).unwrap_err();
     assert!(none.0.contains("no changes"), "{}", none.0);
     // One bad edit refuses the whole batch.
-    let bt = w.device("Bluetooth");
+    let bt = w.device(HEADPHONES);
     let bad = [
         (Change::Quantum(Value::Set(512)), None),
         (Change::PeriodSize(Value::Set(256)), Some(&bt)),
     ];
     assert!(plan::plan_batch(&w.ctx(), &bad, Mode::Save).is_err());
+}
+
+fn run_cmd(p: &Plan) -> (String, Option<String>) {
+    match &p.steps[..] {
+        [Step::Run { cmd, undo, .. }] => (cmd.display(), undo.as_ref().map(|u| u.display())),
+        s => panic!("expected one command: {s:?}"),
+    }
+}
+
+fn profile(want: &str) -> Change {
+    Change::BluetoothProfile(want.into())
+}
+
+#[test]
+fn bluetooth_profiles_switch_live_and_are_remembered_not_saved() {
+    let mut w = World::new("pw-1.2-desktop");
+    // PipeWire 1.x names the best codec's profile without a suffix.
+    let p = w.plan(profile("ldac"), Some(HEADPHONES), None).unwrap();
+    assert_eq!(p.kind, plan::PlanKind::Set(Mode::Live));
+    let (cmd, undo) = run_cmd(&p);
+    assert_eq!(
+        cmd,
+        "pw-cli set-param bluez_card.00_00_00_00_00_01 Profile '{ index: 131080, save: true }'"
+    );
+    assert_eq!(
+        undo.unwrap(),
+        "pw-cli set-param bluez_card.00_00_00_00_00_01 Profile '{ index: 131076, save: true }'"
+    );
+    assert_eq!(
+        p.expect,
+        vec![Expect::BluetoothProfile {
+            card: "bluez_card.00_00_00_00_00_01".into(),
+            description: "Bluetooth Headphones".into(),
+            profile: "a2dp-sink".into(),
+            label: "High quality (LDAC)".into(),
+        }]
+    );
+    assert_golden(
+        "plan/pw-1.2-desktop-bluetooth-profile.txt",
+        &render_plan(&p, &w.paths),
+    );
+
+    // A mode picks the best profile of that mode.
+    let p = w.plan(profile("headset"), Some(HEADPHONES), None).unwrap();
+    assert!(run_cmd(&p).0.contains("index: 196865"));
+    assert!(
+        p.notes.iter().any(|n| n.contains("phone-call quality")),
+        "{:?}",
+        p.notes
+    );
+
+    // A switched-off device has a card but no stream; it can be turned on.
+    let (cmd, _) = run_cmd(
+        &w.plan(profile("high-quality"), Some(SPEAKER), None)
+            .unwrap(),
+    );
+    assert_eq!(
+        cmd,
+        "pw-cli set-param bluez_card.00_00_00_00_00_02 Profile '{ index: 131076, save: true }'"
+    );
+
+    // Already in use: nothing to run.
+    let p = w.plan(profile("aac"), Some(HEADPHONES), None).unwrap();
+    assert!(p.steps.is_empty());
+    assert!(
+        p.notes.iter().any(|n| n.contains("already using")),
+        "{:?}",
+        p.notes
+    );
+
+    for (result, want) in [
+        (
+            w.plan(profile("headset"), Some(HEADPHONES), save()),
+            "remembers the profile",
+        ),
+        (
+            w.plan(profile("aptx"), Some(HEADPHONES), None),
+            "LDAC, AAC, SBC-XQ, SBC, mSBC, CVSD",
+        ),
+        (
+            w.plan(profile("hq"), Some(D50S), None),
+            "isn't a Bluetooth device",
+        ),
+        (w.plan(profile("hq"), None, None), "--device"),
+    ] {
+        let e = result.unwrap_err();
+        assert!(e.contains(want), "{e}");
+    }
+    w.tools.retain(|t| t != "pw-cli");
+    let e = w.plan(profile("ldac"), Some(HEADPHONES), None).unwrap_err();
+    assert!(e.contains("pw-cli isn't installed"), "{e}");
+}
+
+#[test]
+fn old_pipewire_profiles_and_ids() {
+    let mut w = World::new("pw-0.3-laptop");
+    let d = w.device(OLD_HEADSET);
+    let bt = d.bluetooth.as_ref().unwrap();
+    assert_eq!(bt.profile.as_deref(), Some("headset-head-unit-msbc"));
+    // PipeWire 0.3 also lists codec-less profiles; a mode picks the best one.
+    let p = w
+        .plan(profile("high-quality"), Some(OLD_HEADSET), None)
+        .unwrap();
+    assert_eq!(
+        run_cmd(&p).0,
+        "pw-cli set-param bluez_card.00_00_00_00_00_03 Profile '{ index: 131080, save: true }'"
+    );
+    assert!(
+        p.notes.iter().any(|n| n.contains("microphone stops")),
+        "{:?}",
+        p.notes
+    );
+    // pw-cli finds objects by name only from 0.3.44.
+    w.snapshot.stack.pipewire_version = Some("0.3.40".into());
+    let p = w.plan(profile("sbc"), Some(OLD_HEADSET), None).unwrap();
+    assert_eq!(
+        run_cmd(&p).0,
+        "pw-cli set-param 57 Profile '{ index: 131073, save: true }'"
+    );
+}
+
+#[test]
+fn headset_autoswitch_live_on_wireplumber_0_5() {
+    let mut w = World::new("pw-1.2-desktop");
+    assert_eq!(w.snapshot.wireplumber.headset_autoswitch, Some(true));
+    let off = Change::HeadsetAutoswitch(Value::Set(false));
+    let p = w.plan(off.clone(), None, None).unwrap();
+    let (cmd, undo) = run_cmd(&p);
+    assert_eq!(
+        cmd,
+        "wpctl settings bluetooth.autoswitch-to-headset-profile false"
+    );
+    assert_eq!(
+        undo.unwrap(),
+        "wpctl settings bluetooth.autoswitch-to-headset-profile true"
+    );
+    assert!(
+        p.title.contains("until WirePlumber restarts"),
+        "{}",
+        p.title
+    );
+    let p = w
+        .plan(Change::HeadsetAutoswitch(Value::Default), None, None)
+        .unwrap();
+    assert_eq!(
+        run_cmd(&p).0,
+        "wpctl settings --reset bluetooth.autoswitch-to-headset-profile"
+    );
+    let same = w
+        .plan(Change::HeadsetAutoswitch(Value::Set(true)), None, None)
+        .unwrap();
+    assert!(same.steps.is_empty());
+
+    let e = w.plan(off.clone(), Some(HEADPHONES), None).unwrap_err();
+    assert!(e.contains("Leave out --device"), "{e}");
+
+    // A value stored with `wpctl settings --save` beats config files.
+    w.snapshot.wireplumber.headset_autoswitch_saved = Some(true);
+    let p = w.plan(off, None, save()).unwrap();
+    assert!(
+        p.notes
+            .iter()
+            .any(|n| n.contains("wpctl settings --delete")),
+        "{:?}",
+        p.notes
+    );
+}
+
+#[test]
+fn bluetooth_settings_saved_for_wireplumber_0_5() {
+    let mut w = World::new("pw-1.2-desktop");
+    let text = w.run(&[
+        (Change::HeadsetAutoswitch(Value::Set(false)), None, save()),
+        (
+            Change::LdacQuality(Value::Set(LdacQuality::Hq)),
+            Some(HEADPHONES),
+            save(),
+        ),
+        (
+            Change::Suspend(Value::Set(false)),
+            Some(BUILTIN_SINK),
+            save(),
+        ),
+    ]);
+    assert_golden("plan/pw-1.2-desktop-bluetooth.txt", &text);
+    w.dump_files("pw-1.2-desktop-bluetooth");
+    let conf = w.file(&w.paths.wireplumber_05()).unwrap();
+    assert!(conf.contains("monitor.alsa.rules") && conf.contains("monitor.bluez.rules"));
+
+    let ldac = Change::LdacQuality(Value::Set(LdacQuality::Sq));
+    for (result, want) in [
+        (
+            w.plan(ldac.clone(), Some(HEADPHONES), Some(Mode::Live)),
+            "--save",
+        ),
+        (
+            w.plan(ldac.clone(), Some(SPEAKER), save()),
+            "doesn't offer LDAC",
+        ),
+        (w.plan(ldac, Some(D50S), save()), "isn't a Bluetooth device"),
+    ] {
+        let e = result.unwrap_err();
+        assert!(e.contains(want), "{e}");
+    }
+
+    let reset = plan::plan_reset(&w.ctx()).unwrap();
+    w.apply(&reset);
+    assert!(w.saved.is_empty());
+    assert!(w.files.values().all(|f| *f == FileState::Missing));
+}
+
+#[test]
+fn bluetooth_settings_saved_for_wireplumber_0_4() {
+    let mut w = World::new("pw-0.3-laptop");
+    let e = w
+        .plan(
+            Change::HeadsetAutoswitch(Value::Set(false)),
+            None,
+            Some(Mode::Live),
+        )
+        .unwrap_err();
+    assert!(e.contains("WirePlumber 0.4"), "{e}");
+    let text = w.run(&[
+        (Change::HeadsetAutoswitch(Value::Set(false)), None, save()),
+        (
+            Change::LdacQuality(Value::Set(LdacQuality::Mq)),
+            Some(OLD_HEADSET),
+            save(),
+        ),
+    ]);
+    assert_golden("plan/pw-0.3-laptop-bluetooth.txt", &text);
+    w.dump_files("pw-0.3-laptop-bluetooth");
+    assert!(w.file(&w.paths.wireplumber_05()).is_none());
+    let lua = w.file(&w.paths.wireplumber_bluetooth_04()).unwrap();
+    assert!(
+        lua.contains(r#"["bluez5.a2dp.ldac.quality"] = "mq","#),
+        "{lua}"
+    );
+
+    // Back to the defaults removes both files.
+    for (c, d) in [
+        (Change::HeadsetAutoswitch(Value::Default), None),
+        (Change::LdacQuality(Value::Default), Some(OLD_HEADSET)),
+    ] {
+        let p = w.plan(c, d, save()).unwrap();
+        w.apply(&p);
+    }
+    assert!(w.saved.is_empty());
+    assert!(w.files.values().all(|f| *f == FileState::Missing));
 }

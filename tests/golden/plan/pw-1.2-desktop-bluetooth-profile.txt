@@ -1,0 +1,13 @@
+Switch Bluetooth Headphones to High quality (LDAC).
+
+Steps
+  1. Run: pw-cli set-param bluez_card.00_00_00_00_00_01 Profile '{ index: 131080, save: true }'
+     Switches Bluetooth Headphones to High quality (LDAC) (profile a2dp-sink).
+
+Notes
+  - Sound on Bluetooth Headphones stops for a moment while it switches.
+
+Afterwards
+  WirePlumber remembers this profile for the device, including after it reconnects.
+
+`ratewise revert` undoes this.

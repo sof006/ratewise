@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write;
 
 use crate::core::model::Direction;
-use crate::core::settings::{DeviceSaved, GlobalSaved};
+use crate::core::settings::{BluetoothSaved, DeviceSaved, GlobalSaved, SavedConfig};
 
 const HEADER: &str = "Written by Ratewise. It regenerates this file on every `ratewise set --save`,\n\
                       so edits here are lost. `ratewise reset` removes it.";
@@ -121,19 +121,33 @@ fn rules(devices: &BTreeMap<String, DeviceSaved>) -> Vec<(&str, &DeviceSaved, Pr
         .collect()
 }
 
-/// WirePlumber 0.5+: `~/.config/wireplumber/wireplumber.conf.d/60-ratewise.conf`.
-pub fn wireplumber_05(devices: &BTreeMap<String, DeviceSaved>) -> Option<String> {
-    let rules = rules(devices);
-    if rules.is_empty() {
-        return None;
+/// The properties a WirePlumber rule sets on one Bluetooth card.
+fn bluez_props(b: &BluetoothSaved) -> Props {
+    let mut p = Vec::new();
+    if let Some(q) = b.ldac_quality {
+        p.push(("bluez5.a2dp.ldac.quality", quote(q.key())));
     }
-    let mut s = header("#");
-    s.push_str("monitor.alsa.rules = [\n");
-    for (node, d, props) in rules {
+    p
+}
+
+fn bluez_rules(cards: &BTreeMap<String, BluetoothSaved>) -> Vec<(&str, &BluetoothSaved, Props)> {
+    cards
+        .iter()
+        .filter_map(|(name, b)| {
+            let props = bluez_props(b);
+            (!props.is_empty()).then_some((name.as_str(), b, props))
+        })
+        .collect()
+}
+
+/// One SPA-JSON rule list, e.g. `monitor.alsa.rules = [ ... ]`.
+fn spa_rules(s: &mut String, section: &str, key: &str, rules: &[(&str, &str, Props)]) {
+    let _ = writeln!(s, "{section} = [");
+    for (name, description, props) in rules {
         let _ = writeln!(s, "  {{");
-        let _ = writeln!(s, "    # {}", comment_text(&d.description));
+        let _ = writeln!(s, "    # {}", comment_text(description));
         let _ = writeln!(s, "    matches = [");
-        let _ = writeln!(s, "      {{ node.name = {} }}", quote(node));
+        let _ = writeln!(s, "      {{ {key} = {} }}", quote(name));
         let _ = writeln!(s, "    ]");
         let _ = writeln!(s, "    actions = {{");
         let _ = writeln!(s, "      update-props = {{");
@@ -145,6 +159,92 @@ pub fn wireplumber_05(devices: &BTreeMap<String, DeviceSaved>) -> Option<String>
         let _ = writeln!(s, "  }}");
     }
     s.push_str("]\n");
+}
+
+/// WirePlumber 0.5+: `~/.config/wireplumber/wireplumber.conf.d/60-ratewise.conf`, with
+/// WirePlumber settings, ALSA node rules and Bluetooth card rules.
+pub fn wireplumber_05(saved: &SavedConfig) -> Option<String> {
+    let alsa: Vec<(&str, &str, Props)> = rules(&saved.devices)
+        .into_iter()
+        .map(|(node, d, props)| (node, d.description.as_str(), props))
+        .collect();
+    let bluez: Vec<(&str, &str, Props)> = bluez_rules(&saved.bluetooth)
+        .into_iter()
+        .map(|(card, b, props)| (card, b.description.as_str(), props))
+        .collect();
+    let autoswitch = saved.global.headset_autoswitch;
+    if alsa.is_empty() && bluez.is_empty() && autoswitch.is_none() {
+        return None;
+    }
+    let mut sections = Vec::new();
+    if let Some(on) = autoswitch {
+        sections.push(format!(
+            "wireplumber.settings = {{\n    bluetooth.autoswitch-to-headset-profile = {on}\n}}\n"
+        ));
+    }
+    if !alsa.is_empty() {
+        let mut s = String::new();
+        spa_rules(&mut s, "monitor.alsa.rules", "node.name", &alsa);
+        sections.push(s);
+    }
+    if !bluez.is_empty() {
+        let mut s = String::new();
+        spa_rules(&mut s, "monitor.bluez.rules", "device.name", &bluez);
+        sections.push(s);
+    }
+    Some(header("#") + &sections.join("\n"))
+}
+
+/// WirePlumber 0.4: `~/.config/wireplumber/bluetooth.lua.d/60-ratewise.lua`. It loads
+/// after `50-bluez-config.lua`, so these rules are applied last and win.
+pub fn wireplumber_bluetooth_04(cards: &BTreeMap<String, BluetoothSaved>) -> Option<String> {
+    let rules = bluez_rules(cards);
+    if rules.is_empty() {
+        return None;
+    }
+    let mut s = header("--");
+    // Never fail if 50-bluez-config.lua was replaced: a Lua error stops the monitor.
+    s.push_str("bluez_monitor = bluez_monitor or {}\n");
+    s.push_str("bluez_monitor.rules = bluez_monitor.rules or {}\n");
+    for (card, b, props) in rules {
+        let _ = writeln!(s, "\n-- {}", comment_text(&b.description));
+        let _ = writeln!(s, "table.insert(bluez_monitor.rules, {{");
+        let _ = writeln!(s, "  matches = {{");
+        let _ = writeln!(s, "    {{");
+        let _ = writeln!(
+            s,
+            "      {{ \"device.name\", \"equals\", {} }},",
+            quote(card)
+        );
+        let _ = writeln!(s, "    }},");
+        let _ = writeln!(s, "  }},");
+        let _ = writeln!(s, "  apply_properties = {{");
+        for (k, v) in props {
+            let _ = writeln!(s, "    [\"{k}\"] = {v},");
+        }
+        let _ = writeln!(s, "  }},");
+        let _ = writeln!(s, "}})");
+    }
+    Some(s)
+}
+
+/// WirePlumber 0.4: `~/.config/wireplumber/policy.lua.d/60-ratewise.lua`. It loads after
+/// `10-default-policy.lua` sets up `bluetooth_policy` and before `90-enable-all.lua`
+/// starts it, so the value here is the one used.
+pub fn wireplumber_policy_04(g: &GlobalSaved) -> Option<String> {
+    let on = g.headset_autoswitch?;
+    let mut s = header("--");
+    s.push_str("bluetooth_policy = bluetooth_policy or {}\n");
+    s.push_str("bluetooth_policy.policy = bluetooth_policy.policy or {}\n");
+    let what = if on {
+        "Switch Bluetooth headsets to headset mode when a program uses the microphone."
+    } else {
+        "Keep Bluetooth headsets in their mode when a program uses the microphone."
+    };
+    let _ = writeln!(
+        s,
+        "\n-- {what}\nbluetooth_policy.policy[\"media-role.use-headset-profile\"] = {on}"
+    );
     Some(s)
 }
 
@@ -361,8 +461,10 @@ mod tests {
         assert_eq!(stream_properties(&g), None);
         assert_eq!(pulse(&g), None);
         assert_eq!(alsa_block(&g, &BTreeMap::new()), None);
-        assert_eq!(wireplumber_05(&BTreeMap::new()), None);
+        assert_eq!(wireplumber_05(&SavedConfig::default()), None);
         assert_eq!(wireplumber_04(&BTreeMap::new()), None);
+        assert_eq!(wireplumber_bluetooth_04(&BTreeMap::new()), None);
+        assert_eq!(wireplumber_policy_04(&g), None);
     }
 
     #[test]

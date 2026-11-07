@@ -3,8 +3,8 @@
 use std::fmt::Write;
 
 use crate::core::model::{
-    ClockSettings, Device, Direction, FrameRange, KernelProbeStatus, NO_DEVICES_MESSAGE, RateSet,
-    Running, SampleFormat, Snapshot, Sourced, khz,
+    BluetoothMode, ClockSettings, Device, Direction, FrameRange, KernelProbeStatus,
+    NO_DEVICES_MESSAGE, RateSet, Running, SampleFormat, Snapshot, Sourced, codec_label, khz,
 };
 use crate::probe::Probes;
 
@@ -74,23 +74,43 @@ pub(crate) fn device(s: &mut String, d: &Device) {
         _ => "",
     };
     let _ = writeln!(s, "  {} — {}{default}", d.description, d.kind.label());
-    row(s, "running", d.running.as_ref(), running_text, "unknown");
+    // A Bluetooth device that's switched off has no stream to describe.
+    let off = d.bluetooth.is_some() && d.pipewire.is_none();
     let caps = &d.capabilities;
-    row(s, "rates", caps.rates.as_ref(), rates_text, "unknown");
-    row(
-        s,
-        "formats",
-        caps.formats.as_ref(),
-        |f| formats_text(f),
-        "unknown",
-    );
-    row(
-        s,
-        "channels",
-        caps.channels.as_ref(),
-        |c| join(c.iter().map(u32::to_string)),
-        "unknown",
-    );
+    if !off {
+        row(s, "running", d.running.as_ref(), running_text, "unknown");
+        row(s, "rates", caps.rates.as_ref(), rates_text, "unknown");
+        row(
+            s,
+            "formats",
+            caps.formats.as_ref(),
+            |f| formats_text(f),
+            "unknown",
+        );
+        row(
+            s,
+            "channels",
+            caps.channels.as_ref(),
+            |c| join(c.iter().map(u32::to_string)),
+            "unknown",
+        );
+    }
+    if let Some(bt) = &d.bluetooth {
+        let _ = writeln!(s, "    {:<9} {}  [from PipeWire]", "mode", bt.summary());
+        for (label, mode) in [
+            ("codecs", BluetoothMode::HighQuality),
+            ("headset", BluetoothMode::Headset),
+        ] {
+            let codecs = bt.codecs(mode);
+            if !codecs.is_empty() {
+                let _ = writeln!(
+                    s,
+                    "    {label:<9} {}",
+                    join(codecs.iter().map(|c| codec_label(c)))
+                );
+            }
+        }
+    }
     let frames = |r: &FrameRange| format!("{}–{} frames", r.min, r.max);
     if caps.period_frames.is_some() {
         row(s, "period", caps.period_frames.as_ref(), frames, "");

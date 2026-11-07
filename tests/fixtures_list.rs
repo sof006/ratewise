@@ -5,8 +5,8 @@ mod common;
 use common::{assert_golden, fixture};
 use ratewise::cli::list::{render_json, render_text};
 use ratewise::core::model::{
-    DeviceKind, Direction, FrameRange, KernelProbeStatus, RateSet, Running, SampleFormat,
-    SessionManager, Snapshot, SoundServer, Source, WirePlumberConfig,
+    BluetoothMode, DeviceKind, Direction, FrameRange, KernelProbeStatus, RateSet, Running,
+    SampleFormat, SessionManager, Snapshot, SoundServer, Source, WirePlumberConfig,
 };
 use ratewise::probe::Probes;
 
@@ -61,9 +61,10 @@ fn pipewire_1_2_desktop() {
     let snap = snapshot("pw-1.2-desktop");
     assert!(snap.notes.is_empty(), "{:?}", snap.notes);
     assert_eq!(snap.pipewire_version.as_deref(), Some("1.2.7"));
-    // 5 hardware nodes + HDMI 1, which PipeWire's profile doesn't use. The virtual
-    // EasyEffects sink and the Firefox stream are not devices.
-    assert_eq!(snap.devices.len(), 6);
+    // 5 hardware nodes + HDMI 1, which PipeWire's profile doesn't use, + a Bluetooth
+    // speaker that's switched off. The virtual EasyEffects sink and the Firefox
+    // stream are not devices.
+    assert_eq!(snap.devices.len(), 7);
     assert!(snap.devices.iter().all(|d| d.id != "easyeffects_sink"));
 
     let dac = device(&snap, "alsa_output.usb-Topping_D50s-00.analog-stereo");
@@ -379,4 +380,50 @@ fn real_arch_desktop_with_kernel_readings() {
             max: 48_000
         }
     );
+}
+
+#[test]
+fn bluetooth_cards_and_profiles() {
+    let snap = snapshot("pw-1.2-desktop");
+    assert_eq!(snap.wireplumber.headset_autoswitch, Some(true));
+    assert_eq!(snap.wireplumber.headset_autoswitch_saved, None);
+    let hp = device(&snap, "bluez_output.00_00_00_00_00_01.1");
+    assert_eq!(hp.kind, DeviceKind::Bluetooth);
+    let bt = hp.bluetooth.as_ref().unwrap();
+    assert_eq!(bt.card_name, "bluez_card.00_00_00_00_00_01");
+    assert_eq!(bt.card_object_id, 48);
+    assert_eq!(bt.profile.as_deref(), Some("a2dp-sink-aac"));
+    assert_eq!(bt.codec.as_deref(), Some("aac"));
+    assert_eq!(bt.summary(), "High quality · AAC");
+    // PipeWire 1.x: the best codec's profile has no suffix; its codec is in the description.
+    let best = bt.profiles.iter().find(|p| p.name == "a2dp-sink").unwrap();
+    assert_eq!(best.codec(), Some("ldac"));
+    assert_eq!(
+        bt.codecs(BluetoothMode::HighQuality),
+        ["ldac", "aac", "sbc_xq", "sbc"]
+    );
+    assert_eq!(bt.codecs(BluetoothMode::Headset), ["msbc", "cvsd"]);
+
+    // Switched off: a card without nodes is still listed, so it can be turned on.
+    let speaker = device(&snap, "bluez_card.00_00_00_00_00_02");
+    assert!(speaker.pipewire.is_none());
+    assert_eq!(
+        speaker.bluetooth.as_ref().unwrap().mode(),
+        BluetoothMode::Off
+    );
+
+    // PipeWire 0.3: codec-less profiles next to per-codec ones, both sides of a headset.
+    let snap = snapshot("pw-0.3-laptop");
+    for id in [
+        "bluez_output.00_00_00_00_00_03.headset-head-unit",
+        "bluez_input.00_00_00_00_00_03.headset-head-unit",
+    ] {
+        let bt = device(&snap, id).bluetooth.clone().unwrap();
+        assert_eq!(bt.mode(), BluetoothMode::Headset);
+        assert_eq!(bt.current_codec(), Some("msbc"));
+        let bare = bt.profiles.iter().find(|p| p.name == "a2dp-sink").unwrap();
+        assert_eq!(bare.codec(), None);
+    }
+    // WirePlumber 0.4 has no sm-settings metadata.
+    assert_eq!(snap.wireplumber.headset_autoswitch, None);
 }

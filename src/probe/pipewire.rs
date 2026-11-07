@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use serde_json::{Map, Value};
 
-use crate::core::facts::{PwClient, PwDump, PwFormat, PwNode};
+use crate::core::facts::{PwBluezCard, PwClient, PwDump, PwFormat, PwNode, PwProfile};
 use crate::core::model::{ClockSettings, RateSet, SampleFormat};
 use crate::probe::command::{self, RunError};
 
@@ -125,6 +125,9 @@ pub fn parse_pw_dump(json: &str) -> Result<PwDump, PwDumpParseError> {
             "PipeWire:Interface:Device" => {
                 if let (Some(id), Some(p)) = (obj.get("id").and_then(as_u32), props(obj)) {
                     devices.insert(id, p);
+                    if let Some(card) = parse_bluez_card(id, obj, p) {
+                        dump.bluez_cards.push(card);
+                    }
                 }
             }
             "PipeWire:Interface:Node" => nodes.push(obj),
@@ -201,9 +204,50 @@ fn parse_node(obj: &Props, devices: &HashMap<u32, &Props>) -> Option<PwNode> {
         alsa_device: lookup_u32(&["alsa.device", "api.alsa.pcm.device"]),
         alsa_path: lookup("api.alsa.path"),
         profile_name: get_str(p, "device.profile.name"),
+        device_id: get_u32(p, "device.id"),
+        bluez_codec: get_str(p, "api.bluez5.codec"),
         enum_formats: param_list("EnumFormat"),
         current_format: param_list("Format").into_iter().next(),
         name,
+    })
+}
+
+/// A Bluetooth card with its `EnumProfile` and `Profile` params.
+fn parse_bluez_card(id: u32, obj: &Props, p: &Props) -> Option<PwBluezCard> {
+    if get_str(p, "device.api").as_deref() != Some("bluez5") {
+        return None;
+    }
+    let params = info(obj)
+        .and_then(|i| i.get("params"))
+        .and_then(Value::as_object);
+    let list = |key: &str| -> Vec<PwProfile> {
+        params
+            .and_then(|ps| ps.get(key))
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(parse_profile).collect())
+            .unwrap_or_default()
+    };
+    Some(PwBluezCard {
+        id,
+        name: get_str(p, "device.name").unwrap_or_else(|| format!("bluez_card.{id}")),
+        description: get_str(p, "device.description").or_else(|| get_str(p, "device.alias")),
+        profiles: list("EnumProfile"),
+        profile: list("Profile").into_iter().next(),
+    })
+}
+
+fn parse_profile(v: &Value) -> Option<PwProfile> {
+    let o = v.as_object()?;
+    Some(PwProfile {
+        index: o.get("index").and_then(as_u32)?,
+        name: o.get("name").and_then(as_string)?,
+        description: o.get("description").and_then(as_string),
+        available: match o.get("available") {
+            Some(Value::String(s)) => s != "no",
+            Some(Value::Bool(b)) => *b,
+            _ => true,
+        },
+        priority: o.get("priority").and_then(as_u32).unwrap_or(0),
     })
 }
 
@@ -328,6 +372,23 @@ fn parse_metadata(obj: &Props, dump: &mut PwDump) {
                 }
             }
         }
+        "sm-settings" | "persistent-sm-settings" => {
+            let saved = name == "persistent-sm-settings";
+            for e in global {
+                if e.get("key").and_then(Value::as_str)
+                    != Some("bluetooth.autoswitch-to-headset-profile")
+                {
+                    continue;
+                }
+                let v = e.get("value").and_then(as_bool);
+                let w = &mut dump.wireplumber;
+                if saved {
+                    w.headset_autoswitch_saved = v;
+                } else {
+                    w.headset_autoswitch = v;
+                }
+            }
+        }
         "default" => {
             for e in global {
                 let (Some(key), Some(value)) =
@@ -385,6 +446,19 @@ fn as_string(v: &Value) -> Option<String> {
         Value::String(s) => Some(s.clone()),
         Value::Number(n) => Some(n.to_string()),
         Value::Bool(b) => Some(b.to_string()),
+        _ => None,
+    }
+}
+
+/// `true`, or `"true"` (metadata values may be JSON inside strings).
+fn as_bool(v: &Value) -> Option<bool> {
+    match v {
+        Value::Bool(b) => Some(*b),
+        Value::String(s) => match s.trim() {
+            "true" => Some(true),
+            "false" => Some(false),
+            _ => None,
+        },
         _ => None,
     }
 }

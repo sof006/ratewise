@@ -58,7 +58,8 @@
       },
       "kernel_probe": {
         "status": "permission_denied"
-      }
+      },
+      "bluetooth": null
     },
     {
       "id": "alsa:PCH:3:playback",
@@ -89,6 +90,125 @@
       "kernel_probe": {
         "status": "failed",
         "message": "couldn't open the device (No such device (os error 19))"
+      },
+      "bluetooth": null
+    },
+    {
+      "id": "bluez_output.00_00_00_00_00_03.headset-head-unit",
+      "description": "Bluetooth Headset",
+      "direction": "playback",
+      "kind": "bluetooth",
+      "alsa": null,
+      "pipewire": {
+        "object_id": 58,
+        "node_name": "bluez_output.00_00_00_00_00_03.headset-head-unit",
+        "media_class": "Audio/Sink",
+        "state": "suspended",
+        "is_default": false
+      },
+      "capabilities": {
+        "rates": {
+          "value": {
+            "kind": "discrete",
+            "rates": [
+              16000
+            ]
+          },
+          "source": "PipeWire"
+        },
+        "formats": {
+          "value": [
+            "S16_LE"
+          ],
+          "source": "PipeWire"
+        },
+        "channels": {
+          "value": [
+            1
+          ],
+          "source": "PipeWire"
+        },
+        "period_frames": null,
+        "buffer_frames": null
+      },
+      "running": {
+        "value": {
+          "state": "idle"
+        },
+        "source": "PipeWire"
+      },
+      "kernel_probe": null,
+      "bluetooth": {
+        "card_name": "bluez_card.00_00_00_00_00_03",
+        "card_object_id": 57,
+        "profile": "headset-head-unit-msbc",
+        "codec": "msbc",
+        "profiles": [
+          {
+            "index": 0,
+            "name": "off",
+            "description": "Off",
+            "available": true,
+            "priority": 0,
+            "codec": null
+          },
+          {
+            "index": 131072,
+            "name": "a2dp-sink",
+            "description": "High Fidelity Playback (A2DP Sink)",
+            "available": true,
+            "priority": 16,
+            "codec": null
+          },
+          {
+            "index": 131076,
+            "name": "a2dp-sink-aac",
+            "description": "High Fidelity Playback (A2DP Sink, codec AAC)",
+            "available": true,
+            "priority": 21,
+            "codec": "aac"
+          },
+          {
+            "index": 131080,
+            "name": "a2dp-sink-ldac",
+            "description": "High Fidelity Playback (A2DP Sink, codec LDAC)",
+            "available": true,
+            "priority": 26,
+            "codec": "ldac"
+          },
+          {
+            "index": 131073,
+            "name": "a2dp-sink-sbc",
+            "description": "High Fidelity Playback (A2DP Sink, codec SBC)",
+            "available": true,
+            "priority": 18,
+            "codec": "sbc"
+          },
+          {
+            "index": 196608,
+            "name": "headset-head-unit",
+            "description": "Headset Head Unit (HSP/HFP)",
+            "available": true,
+            "priority": 1,
+            "codec": null
+          },
+          {
+            "index": 196864,
+            "name": "headset-head-unit-cvsd",
+            "description": "Headset Head Unit (HSP/HFP, codec CVSD)",
+            "available": true,
+            "priority": 1,
+            "codec": "cvsd"
+          },
+          {
+            "index": 196865,
+            "name": "headset-head-unit-msbc",
+            "description": "Headset Head Unit (HSP/HFP, codec mSBC)",
+            "available": true,
+            "priority": 2,
+            "codec": "msbc"
+          }
+        ]
       }
     },
     {
@@ -144,6 +264,125 @@
       },
       "kernel_probe": {
         "status": "permission_denied"
+      },
+      "bluetooth": null
+    },
+    {
+      "id": "bluez_input.00_00_00_00_00_03.headset-head-unit",
+      "description": "Bluetooth Headset",
+      "direction": "capture",
+      "kind": "bluetooth",
+      "alsa": null,
+      "pipewire": {
+        "object_id": 59,
+        "node_name": "bluez_input.00_00_00_00_00_03.headset-head-unit",
+        "media_class": "Audio/Source",
+        "state": "suspended",
+        "is_default": false
+      },
+      "capabilities": {
+        "rates": {
+          "value": {
+            "kind": "discrete",
+            "rates": [
+              16000
+            ]
+          },
+          "source": "PipeWire"
+        },
+        "formats": {
+          "value": [
+            "S16_LE"
+          ],
+          "source": "PipeWire"
+        },
+        "channels": {
+          "value": [
+            1
+          ],
+          "source": "PipeWire"
+        },
+        "period_frames": null,
+        "buffer_frames": null
+      },
+      "running": {
+        "value": {
+          "state": "idle"
+        },
+        "source": "PipeWire"
+      },
+      "kernel_probe": null,
+      "bluetooth": {
+        "card_name": "bluez_card.00_00_00_00_00_03",
+        "card_object_id": 57,
+        "profile": "headset-head-unit-msbc",
+        "codec": "msbc",
+        "profiles": [
+          {
+            "index": 0,
+            "name": "off",
+            "description": "Off",
+            "available": true,
+            "priority": 0,
+            "codec": null
+          },
+          {
+            "index": 131072,
+            "name": "a2dp-sink",
+            "description": "High Fidelity Playback (A2DP Sink)",
+            "available": true,
+            "priority": 16,
+            "codec": null
+          },
+          {
+            "index": 131076,
+            "name": "a2dp-sink-aac",
+            "description": "High Fidelity Playback (A2DP Sink, codec AAC)",
+            "available": true,
+            "priority": 21,
+            "codec": "aac"
+          },
+          {
+            "index": 131080,
+            "name": "a2dp-sink-ldac",
+            "description": "High Fidelity Playback (A2DP Sink, codec LDAC)",
+            "available": true,
+            "priority": 26,
+            "codec": "ldac"
+          },
+          {
+            "index": 131073,
+            "name": "a2dp-sink-sbc",
+            "description": "High Fidelity Playback (A2DP Sink, codec SBC)",
+            "available": true,
+            "priority": 18,
+            "codec": "sbc"
+          },
+          {
+            "index": 196608,
+            "name": "headset-head-unit",
+            "description": "Headset Head Unit (HSP/HFP)",
+            "available": true,
+            "priority": 1,
+            "codec": null
+          },
+          {
+            "index": 196864,
+            "name": "headset-head-unit-cvsd",
+            "description": "Headset Head Unit (HSP/HFP, codec CVSD)",
+            "available": true,
+            "priority": 1,
+            "codec": "cvsd"
+          },
+          {
+            "index": 196865,
+            "name": "headset-head-unit-msbc",
+            "description": "Headset Head Unit (HSP/HFP, codec mSBC)",
+            "available": true,
+            "priority": 2,
+            "codec": "msbc"
+          }
+        ]
       }
     }
   ],
@@ -174,6 +413,10 @@
     "pulseaudio_version": null,
     "jack_running": false,
     "systemd_user_session": true
+  },
+  "wireplumber": {
+    "headset_autoswitch": null,
+    "headset_autoswitch_saved": null
   },
   "notes": []
 }

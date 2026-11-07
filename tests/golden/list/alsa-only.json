@@ -34,7 +34,8 @@
       },
       "kernel_probe": {
         "status": "busy"
-      }
+      },
+      "bluetooth": null
     },
     {
       "id": "alsa:PCH:0:capture",
@@ -98,7 +99,8 @@
       },
       "kernel_probe": {
         "status": "ok"
-      }
+      },
+      "bluetooth": null
     },
     {
       "id": "alsa:Device:0:capture",
@@ -164,7 +166,8 @@
       },
       "kernel_probe": {
         "status": "ok"
-      }
+      },
+      "bluetooth": null
     }
   ],
   "clock": null,
@@ -177,6 +180,10 @@
     "pulseaudio_version": null,
     "jack_running": false,
     "systemd_user_session": true
+  },
+  "wireplumber": {
+    "headset_autoswitch": null,
+    "headset_autoswitch_saved": null
   },
   "notes": [
     {

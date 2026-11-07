@@ -13,7 +13,7 @@ use clap::{Args, Parser, Subcommand};
 
 use crate::app::{Env, Session};
 use crate::core::model::SampleFormat;
-use crate::core::settings::{Change, Mode, Value};
+use crate::core::settings::{Change, LdacQuality, Mode, Value};
 use crate::probe::Probes;
 
 #[derive(Debug, Parser)]
@@ -181,6 +181,29 @@ pub enum SetCommand {
         #[command(flatten)]
         opts: SetOpts,
     },
+    /// A Bluetooth device's mode or codec: `high-quality`, `headset` (with microphone),
+    /// `off`, a codec such as `ldac` or `aac`, or a profile name from `ratewise show`.
+    Profile {
+        value: String,
+        #[command(flatten)]
+        opts: SetOpts,
+    },
+    /// `off` keeps Bluetooth headsets in high quality mode when a program opens the
+    /// microphone, instead of switching them to headset mode. Global.
+    HeadsetAutoswitch {
+        #[arg(value_parser = parse_on_off)]
+        value: Value<bool>,
+        #[command(flatten)]
+        opts: SetOpts,
+    },
+    /// A Bluetooth device's LDAC bitrate: `hq` (990 kbps), `sq` (660), `mq` (330) or
+    /// `auto` (adapts to the connection). Saved only.
+    LdacQuality {
+        #[arg(value_parser = parse_ldac)]
+        value: Value<LdacQuality>,
+        #[command(flatten)]
+        opts: SetOpts,
+    },
 }
 
 impl SetCommand {
@@ -199,6 +222,9 @@ impl SetCommand {
             S::Headroom { value, opts } => (Change::Headroom(value), opts),
             S::Suspend { value, opts } => (Change::Suspend(value), opts),
             S::ResampleQuality { value, opts } => (Change::ResampleQuality(value), opts),
+            S::Profile { value, opts } => (Change::BluetoothProfile(value), opts),
+            S::HeadsetAutoswitch { value, opts } => (Change::HeadsetAutoswitch(value), opts),
+            S::LdacQuality { value, opts } => (Change::LdacQuality(value), opts),
         }
     }
 }
@@ -343,6 +369,24 @@ fn parse_suspend(s: &str) -> Result<Value<bool>, String> {
             "\"{s}\": use `off` to keep the device open, or `on`"
         )),
     }
+}
+
+fn parse_on_off(s: &str) -> Result<Value<bool>, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "off" | "no" | "false" => Ok(Value::Set(false)),
+        "on" | "yes" | "true" => Ok(Value::Set(true)),
+        _ if is_default(s) => Ok(Value::Default),
+        _ => Err(format!("\"{s}\": use `on`, `off` or `default`")),
+    }
+}
+
+fn parse_ldac(s: &str) -> Result<Value<LdacQuality>, String> {
+    if is_default(s) {
+        return Ok(Value::Default);
+    }
+    LdacQuality::parse(s)
+        .map(Value::Set)
+        .ok_or_else(|| format!("\"{s}\": use `hq` (990 kbps), `sq` (660), `mq` (330) or `auto`"))
 }
 
 fn parse_quality(s: &str) -> Result<Value<u8>, String> {

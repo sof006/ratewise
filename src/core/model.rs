@@ -441,6 +441,206 @@ pub struct PipeWireNode {
     pub is_default: bool,
 }
 
+/// A Bluetooth device's mode and codec, from its PipeWire card (`bluez_card.*`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Bluetooth {
+    /// The card's `device.name`, e.g. `bluez_card.00_11_22_33_44_55`. Stable, so rules
+    /// match on it.
+    pub card_name: String,
+    /// The card's PipeWire object id, for `wpctl set-profile`. Not stable across restarts.
+    pub card_object_id: u32,
+    /// The active profile's name, e.g. `a2dp-sink`.
+    pub profile: Option<String>,
+    /// The codec in use, e.g. `ldac` (the node's `api.bluez5.codec`).
+    pub codec: Option<String>,
+    /// Every profile the card offers, in PipeWire's order.
+    pub profiles: Vec<BluetoothProfile>,
+}
+
+impl Bluetooth {
+    pub fn active(&self) -> Option<&BluetoothProfile> {
+        let name = self.profile.as_deref()?;
+        self.profiles.iter().find(|p| p.name == name)
+    }
+
+    pub fn mode(&self) -> BluetoothMode {
+        match &self.profile {
+            Some(p) => BluetoothMode::of(p),
+            None => BluetoothMode::Other,
+        }
+    }
+
+    /// The codec in use: the node's, else the one the active profile names.
+    pub fn current_codec(&self) -> Option<&str> {
+        self.codec
+            .as_deref()
+            .or_else(|| self.active().and_then(BluetoothProfile::codec))
+    }
+
+    /// Codecs the card offers in `mode`, in PipeWire's order, available ones only.
+    pub fn codecs(&self, mode: BluetoothMode) -> Vec<&str> {
+        let mut out: Vec<&str> = Vec::new();
+        for p in &self.profiles {
+            if let Some(c) = p.codec()
+                && p.available
+                && p.mode() == mode
+                && !out.contains(&c)
+            {
+                out.push(c);
+            }
+        }
+        out
+    }
+
+    /// Modes the card can switch to, in a fixed order.
+    pub fn modes(&self) -> Vec<BluetoothMode> {
+        [
+            BluetoothMode::HighQuality,
+            BluetoothMode::Headset,
+            BluetoothMode::Off,
+        ]
+        .into_iter()
+        .filter(|m| self.profiles.iter().any(|p| p.available && p.mode() == *m))
+        .collect()
+    }
+
+    /// "High quality · LDAC".
+    pub fn summary(&self) -> String {
+        let mode = self.mode();
+        let mode_text = match (mode, &self.profile) {
+            (BluetoothMode::Other, Some(p)) => self
+                .active()
+                .map_or_else(|| p.clone(), |a| a.description.clone()),
+            (BluetoothMode::Other, None) => "unknown".into(),
+            (m, _) => m.label().to_string(),
+        };
+        match self.current_codec() {
+            Some(c) if mode != BluetoothMode::Off => format!("{mode_text} · {}", codec_label(c)),
+            _ => mode_text,
+        }
+    }
+}
+
+/// One entry of the card's `EnumProfile`.
+///
+/// The index encodes the profile and codec and changes between PipeWire versions, so
+/// Ratewise never stores it: it looks the name up again when it switches.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BluetoothProfile {
+    pub index: u32,
+    pub name: String,
+    pub description: String,
+    /// `false` when the device or adapter can't use it right now.
+    pub available: bool,
+    /// PipeWire's ranking; it picks the highest on its own.
+    #[serde(default)]
+    pub priority: u32,
+    /// The codec this profile uses, e.g. `ldac`. `None` when PipeWire picks it (the
+    /// codec-less profiles of PipeWire before 0.3.78).
+    #[serde(default)]
+    pub codec: Option<String>,
+}
+
+impl BluetoothProfile {
+    pub fn mode(&self) -> BluetoothMode {
+        BluetoothMode::of(&self.name)
+    }
+
+    pub fn codec(&self) -> Option<&str> {
+        self.codec.as_deref()
+    }
+}
+
+/// What a Bluetooth profile is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BluetoothMode {
+    /// A2DP (or LE Audio) playback: good sound, no microphone.
+    HighQuality,
+    /// HFP/HSP: microphone works, sound is phone-call quality.
+    Headset,
+    Off,
+    /// Anything else, such as being the audio source for a phone.
+    Other,
+}
+
+impl BluetoothMode {
+    pub fn of(profile: &str) -> Self {
+        if profile == "off" {
+            Self::Off
+        } else if ["a2dp-sink", "a2dp-auto", "bap-sink", "asha-sink"]
+            .iter()
+            .any(|p| profile.starts_with(p))
+        {
+            Self::HighQuality
+        } else if profile.starts_with("headset-head-unit") || profile.starts_with("bap-duplex") {
+            Self::Headset
+        } else {
+            Self::Other
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::HighQuality => "High quality",
+            Self::Headset => "Headset (with microphone)",
+            Self::Off => "Off",
+            Self::Other => "Other",
+        }
+    }
+}
+
+/// PipeWire's codec names (`bluez5.codecs`) and how people usually write them.
+const CODECS: [(&str, &str); 22] = [
+    ("sbc", "SBC"),
+    ("sbc_xq", "SBC-XQ"),
+    ("aac", "AAC"),
+    ("aac_eld", "AAC-ELD"),
+    ("aptx", "aptX"),
+    ("aptx_hd", "aptX HD"),
+    ("aptx_ll", "aptX LL"),
+    ("aptx_ll_duplex", "aptX LL (duplex)"),
+    ("ldac", "LDAC"),
+    ("lc3", "LC3"),
+    ("lc3plus_h3", "LC3plus"),
+    ("lc3_swb", "LC3-SWB"),
+    ("faststream", "FastStream"),
+    ("faststream_duplex", "FastStream (duplex)"),
+    ("opus_05", "Opus"),
+    ("opus_05_51", "Opus 5.1"),
+    ("opus_05_71", "Opus 7.1"),
+    ("opus_05_duplex", "Opus (duplex)"),
+    ("opus_05_pro", "Opus Pro"),
+    ("opus_g", "Opus (Google)"),
+    ("msbc", "mSBC"),
+    ("cvsd", "CVSD"),
+];
+
+/// A codec's usual name, e.g. `aptx_hd` → "aptX HD". Unknown ones are shown upper-cased.
+pub fn codec_label(codec: &str) -> String {
+    match CODECS.iter().find(|(k, _)| *k == codec) {
+        Some((_, label)) => label.to_string(),
+        None => codec.to_ascii_uppercase().replace('_', " "),
+    }
+}
+
+/// PipeWire's codec name for one written in a profile description ("aptX HD" →
+/// `aptx_hd`). Unknown names are lower-cased with spaces and dashes as `_`.
+pub fn codec_key(written: &str) -> String {
+    let norm = |s: &str| -> String {
+        s.trim()
+            .to_ascii_lowercase()
+            .chars()
+            .map(|c| if c == '-' || c == ' ' { '_' } else { c })
+            .collect()
+    };
+    let n = norm(written);
+    CODECS
+        .iter()
+        .find(|(k, l)| *k == n || norm(l) == n)
+        .map_or(n, |(k, _)| k.to_string())
+}
+
 /// One playback or capture endpoint, merged from every source that knows about it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Device {
@@ -455,6 +655,9 @@ pub struct Device {
     pub running: Option<Sourced<Running>>,
     /// `None` when the kernel wasn't probed (no `/dev/snd`, Bluetooth, fixture without data).
     pub kernel_probe: Option<KernelProbeStatus>,
+    /// Profiles and codec, for Bluetooth devices on PipeWire.
+    #[serde(default)]
+    pub bluetooth: Option<Bluetooth>,
 }
 
 /// PipeWire's global clock settings (the `settings` metadata).
@@ -467,6 +670,16 @@ pub struct ClockSettings {
     pub max_quantum: Option<u32>,
     pub force_rate: Option<u32>,
     pub force_quantum: Option<u32>,
+}
+
+/// WirePlumber 0.5's settings, from the `sm-settings` and `persistent-sm-settings`
+/// metadata. Empty on WirePlumber 0.4, which has neither.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WirePlumberSettings {
+    /// `bluetooth.autoswitch-to-headset-profile` in effect.
+    pub headset_autoswitch: Option<bool>,
+    /// The value saved with `wpctl settings --save`, which overrides config files.
+    pub headset_autoswitch_saved: Option<bool>,
 }
 
 /// Something a probe couldn't do, in plain English.
@@ -484,6 +697,9 @@ pub struct Snapshot {
     pub clock: Option<Sourced<ClockSettings>>,
     pub pipewire_version: Option<String>,
     pub stack: StackReport,
+    /// WirePlumber 0.5's settings.
+    #[serde(default)]
+    pub wireplumber: WirePlumberSettings,
     pub notes: Vec<ProbeNote>,
 }
 

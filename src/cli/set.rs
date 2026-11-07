@@ -107,6 +107,27 @@ pub fn show(
     }
     let mut s = String::new();
     super::list::device(&mut s, d);
+    if let Some(bt) = &d.bluetooth {
+        let _ = writeln!(
+            s,
+            "  Bluetooth profiles (switch with `ratewise set profile <name> --device {}`)",
+            d.id
+        );
+        for p in &bt.profiles {
+            let mark = if bt.profile.as_deref() == Some(p.name.as_str()) {
+                "*"
+            } else {
+                " "
+            };
+            let unavailable = if p.available { "" } else { "  (not available)" };
+            let _ = writeln!(
+                s,
+                "  {mark} {:<26} {}{unavailable}",
+                p.name,
+                crate::core::bluetooth::profile_label(p)
+            );
+        }
+    }
     if let Some(saved) = saved {
         // Empty entries are never saved, so there's always at least one row.
         let _ = writeln!(s, "  Saved by Ratewise");

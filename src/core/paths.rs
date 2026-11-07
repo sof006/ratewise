@@ -62,6 +62,23 @@ impl Paths {
     pub fn wireplumber_04(&self) -> PathBuf {
         Self::own(self.config.join("wireplumber/main.lua.d"), "lua")
     }
+    /// WirePlumber 0.4's Bluetooth monitor rules (a separate Lua config).
+    pub fn wireplumber_bluetooth_04(&self) -> PathBuf {
+        Self::own(self.config.join("wireplumber/bluetooth.lua.d"), "lua")
+    }
+    /// WirePlumber 0.4's policy settings, such as switching Bluetooth to headset mode.
+    pub fn wireplumber_policy_04(&self) -> PathBuf {
+        Self::own(self.config.join("wireplumber/policy.lua.d"), "lua")
+    }
+    /// Every WirePlumber file Ratewise may own, for either version.
+    pub fn wireplumber_files(&self) -> Vec<PathBuf> {
+        vec![
+            self.wireplumber_05(),
+            self.wireplumber_04(),
+            self.wireplumber_bluetooth_04(),
+            self.wireplumber_policy_04(),
+        ]
+    }
     pub fn pulse_daemon_conf(&self) -> PathBuf {
         self.config.join("pulse/daemon.conf")
     }
@@ -88,6 +105,8 @@ impl Paths {
             self.pipewire_pulse_dropin(),
             self.wireplumber_05(),
             self.wireplumber_04(),
+            self.wireplumber_bluetooth_04(),
+            self.wireplumber_policy_04(),
             self.pulse_daemon_conf(),
             self.pulse_dropin(),
             self.asoundrc(),

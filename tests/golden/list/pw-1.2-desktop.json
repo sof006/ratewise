@@ -72,7 +72,8 @@
       },
       "kernel_probe": {
         "status": "ok"
-      }
+      },
+      "bluetooth": null
     },
     {
       "id": "alsa_output.pci-0000_01_00.1.hdmi-stereo",
@@ -151,7 +152,8 @@
       },
       "kernel_probe": {
         "status": "ok"
-      }
+      },
+      "bluetooth": null
     },
     {
       "id": "alsa:NVidia:7:playback",
@@ -224,7 +226,8 @@
       },
       "kernel_probe": {
         "status": "ok"
-      }
+      },
+      "bluetooth": null
     },
     {
       "id": "alsa_output.usb-Topping_D50s-00.analog-stereo",
@@ -293,7 +296,8 @@
       },
       "kernel_probe": {
         "status": "busy"
-      }
+      },
+      "bluetooth": null
     },
     {
       "id": "bluez_output.00_00_00_00_00_01.1",
@@ -339,7 +343,120 @@
         },
         "source": "PipeWire"
       },
-      "kernel_probe": null
+      "kernel_probe": null,
+      "bluetooth": {
+        "card_name": "bluez_card.00_00_00_00_00_01",
+        "card_object_id": 48,
+        "profile": "a2dp-sink-aac",
+        "codec": "aac",
+        "profiles": [
+          {
+            "index": 0,
+            "name": "off",
+            "description": "Off",
+            "available": true,
+            "priority": 0,
+            "codec": null
+          },
+          {
+            "index": 131080,
+            "name": "a2dp-sink",
+            "description": "High Fidelity Playback (A2DP Sink, codec LDAC)",
+            "available": true,
+            "priority": 26,
+            "codec": "ldac"
+          },
+          {
+            "index": 131076,
+            "name": "a2dp-sink-aac",
+            "description": "High Fidelity Playback (A2DP Sink, codec AAC)",
+            "available": true,
+            "priority": 21,
+            "codec": "aac"
+          },
+          {
+            "index": 131074,
+            "name": "a2dp-sink-sbc_xq",
+            "description": "High Fidelity Playback (A2DP Sink, codec SBC-XQ)",
+            "available": true,
+            "priority": 19,
+            "codec": "sbc_xq"
+          },
+          {
+            "index": 131073,
+            "name": "a2dp-sink-sbc",
+            "description": "High Fidelity Playback (A2DP Sink, codec SBC)",
+            "available": true,
+            "priority": 18,
+            "codec": "sbc"
+          },
+          {
+            "index": 196865,
+            "name": "headset-head-unit",
+            "description": "Headset Head Unit (HSP/HFP, codec mSBC)",
+            "available": true,
+            "priority": 2,
+            "codec": "msbc"
+          },
+          {
+            "index": 196864,
+            "name": "headset-head-unit-cvsd",
+            "description": "Headset Head Unit (HSP/HFP, codec CVSD)",
+            "available": true,
+            "priority": 1,
+            "codec": "cvsd"
+          }
+        ]
+      }
+    },
+    {
+      "id": "bluez_card.00_00_00_00_00_02",
+      "description": "Bluetooth Speaker",
+      "direction": "playback",
+      "kind": "bluetooth",
+      "alsa": null,
+      "pipewire": null,
+      "capabilities": {
+        "rates": null,
+        "formats": null,
+        "channels": null,
+        "period_frames": null,
+        "buffer_frames": null
+      },
+      "running": null,
+      "kernel_probe": null,
+      "bluetooth": {
+        "card_name": "bluez_card.00_00_00_00_00_02",
+        "card_object_id": 49,
+        "profile": "off",
+        "codec": null,
+        "profiles": [
+          {
+            "index": 0,
+            "name": "off",
+            "description": "Off",
+            "available": true,
+            "priority": 0,
+            "codec": null
+          },
+          {
+            "index": 131076,
+            "name": "a2dp-sink",
+            "description": "High Fidelity Playback (A2DP Sink, codec AAC)",
+            "available": true,
+            "priority": 21,
+            "codec": "aac"
+          },
+          {
+            "index": 131073,
+            "name": "a2dp-sink-sbc",
+            "description": "High Fidelity Playback (A2DP Sink, codec SBC)",
+            "available": true,
+            "priority": 18,
+            "codec": "sbc"
+          }
+        ]
+      }
     },
     {
       "id": "alsa_input.pci-0000_00_1f.3.analog-stereo",
@@ -409,7 +526,8 @@
       },
       "kernel_probe": {
         "status": "ok"
-      }
+      },
+      "bluetooth": null
     }
   ],
   "clock": {
@@ -442,6 +560,10 @@
     "pulseaudio_version": null,
     "jack_running": false,
     "systemd_user_session": true
+  },
+  "wireplumber": {
+    "headset_autoswitch": true,
+    "headset_autoswitch_saved": null
   },
   "notes": []
 }

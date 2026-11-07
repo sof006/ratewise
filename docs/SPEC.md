@@ -99,6 +99,9 @@ Every change goes through `core::plan`, which produces a `Plan` made up of a lis
 | Per-device period size / headroom | device | Common fix for USB DAC crackle |
 | Resampler quality | global | |
 | Disable suspend-on-idle | device | Fixes pops at playback start |
+| Bluetooth mode / codec (profile) | device, live | High quality (A2DP/BAP) or headset (HFP/HSP, with microphone), and the codec within it. WirePlumber remembers it, so it's never saved. |
+| Headset auto-switch | global | Whether WirePlumber switches a Bluetooth headset to headset mode when a program opens its microphone. Live on WirePlumber 0.5 only. |
+| LDAC quality | device, saved | `hq` / `sq` / `mq` / `auto`, for devices that offer LDAC. Applied when the device connects. |
 
 Grey out any value the device can't do, with a tooltip explaining why.
 
@@ -109,6 +112,12 @@ Grey out any value the device can't do, with a tooltip explaining why.
   - 0.5+: `~/.config/wireplumber/wireplumber.conf.d/60-ratewise.conf` using `monitor.alsa.rules` SPA-JSON.
   - 0.4: `~/.config/wireplumber/main.lua.d/60-ratewise.lua` using `alsa_monitor.rules`.
   - Match devices on a stable key (`node.name` or `device.name`), never on a numeric ID.
+- **Bluetooth (PipeWire only):**
+  - Profiles come from the card's `EnumProfile`/`Profile` params in `pw-dump`. Names are `<base>` or `<base>-<codec>`. Since PipeWire 0.3.78 the best codec's profile has the bare name (`a2dp-sink`) and its codec appears only in the description ("…, codec LDAC"); 0.3.21–0.3.77 also list a codec-less `a2dp-sink` next to the per-codec ones. Profile indexes change between versions, so Ratewise looks the index up from the current snapshot every time and never stores it.
+  - Switching: `pw-cli set-param <device.name> Profile '{ index: N, save: true }'`. `save: true` makes WirePlumber remember it per device (`~/.local/state/wireplumber/default-profile`). `wpctl set-profile` only sends `save` from WirePlumber 0.5.11 and takes numeric ids only, so it isn't used. pw-cli finds objects by name from PipeWire 0.3.44; before that Ratewise passes the numeric id.
+  - Headset auto-switch: WirePlumber 0.5's `bluetooth.autoswitch-to-headset-profile` setting, live with `wpctl settings <key> true|false` (`--reset` for the default), saved in `wireplumber.settings = { … }` in the same `60-ratewise.conf`. A value stored with `wpctl settings --save` overrides config files; Ratewise reads it from the `persistent-sm-settings` metadata and says how to remove it. WirePlumber 0.4: `bluetooth_policy.policy["media-role.use-headset-profile"]` in `~/.config/wireplumber/policy.lua.d/60-ratewise.lua`, saved only.
+  - LDAC quality: `bluez5.a2dp.ldac.quality` on the card, via `monitor.bluez.rules` matching `device.name` (0.5), or `bluez_monitor.rules` in `~/.config/wireplumber/bluetooth.lua.d/60-ratewise.lua` (0.4). Needs a WirePlumber restart and the device to reconnect.
+  - Rate, format, period size and the other ALSA settings don't apply to Bluetooth devices: the codec sets them. A card whose profile is off has no nodes; it's still listed so it can be switched on. PulseAudio-only Bluetooth is shown but not configured.
 - **Resampler quality (PipeWire):** `stream.properties { resample.quality = N }` in `~/.config/pipewire/client.conf.d/` and `pipewire-pulse.conf.d/` (plus `client-rt.conf.d/` on PipeWire 0.3, whose ALSA-plugin clients read it). Programs pick it up when they start playing.
 - **PulseAudio:** a drop-in, `~/.config/pulse/daemon.conf.d/60-ratewise.conf` (`default-sample-rate`, `alternate-sample-rate`, `avoid-resampling = yes`, `default-sample-format`). PulseAudio has a `.d` mechanism, but derives the folder from whichever `daemon.conf` it opened, so it reads `~/.config/pulse/daemon.conf.d/` only when `~/.config/pulse/daemon.conf` exists. If it doesn't, Ratewise creates it as a copy of `/etc/pulse/daemon.conf` (the user file replaces the system one), records a fingerprint, and `reset` removes it only if nobody edited it. Quantum, resampler and per-device settings aren't offered. `$PULSE_CONFIG` set → refuse.
 - **Bare ALSA:** a marked block in `~/.asoundrc` with `defaults.pcm.dmix.rate` and `.format` (dsnoop reads these too; there are no `defaults.pcm.dsnoop.*` keys), and per-card period sizes as alsa-lib's `pcm/dmix.conf` and `pcm/dsnoop.conf` look them up: `defaults.dmix.<card_id>.period_size` for playback, `cards.<card_id>.pcm.dsnoop.period_size` for capture.
@@ -134,7 +143,7 @@ The toolkit is **Slint**, using its own renderer.
 - **Left sidebar:** device list grouped as Outputs / Inputs. Each entry shows an icon (USB / built-in / HDMI / Bluetooth), the name, and a small badge with the running rate ("48 kHz · 24-bit", or "idle"). The bottom of the sidebar shows the sound-server status pill (e.g. "PipeWire 1.2 · WirePlumber 0.5").
 - **Main panel, per device:**
   - **Overview:** a large "Running now" readout (rate / format / buffer / latency) next to the "Configured" values, plus a capability summary as chips (supported rates highlighted on a full standard-rate strip).
-  - **Sample rate & format:** segmented selectors containing only valid options.
+  - **Sample rate & format:** segmented selectors containing only valid options. Bluetooth devices get a **Bluetooth** tab here instead: mode, codec (only ones both sides support), LDAC quality when offered, and headset auto-switch.
   - **Buffer & latency:** a quantum slider with live ms readout and plain-English hints ("lower = less latency, more risk of crackles").
   - **Advanced:** period size, headroom, suspend, resampler, raw properties table (copyable).
 - **Global settings** page for clock/allowed rates/quantum.
@@ -200,6 +209,9 @@ ratewise set rate 96000 [--device X] [--live|--save]
 ratewise set allowed-rates 44100,48000,88200,96000 --save
 ratewise set quantum 256 [--live|--save] [--restart]
 ratewise set {min-quantum,max-quantum,force-rate,force-quantum,format,period-size,headroom,suspend,resample-quality} …
+ratewise set profile {high-quality,headset,off,<codec>,<profile name>} --device X     Bluetooth, live
+ratewise set headset-autoswitch {on,off,default} [--live|--save]
+ratewise set ldac-quality {hq,sq,mq,auto,default} --device X --save
 ratewise plan …                     print the plan + diffs, change nothing
 ratewise revert | reset [--restart] [--dry-run]
 ratewise doctor                     stack/version/tools/renderer report

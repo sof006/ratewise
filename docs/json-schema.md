@@ -9,6 +9,7 @@ Stable output for scripts. `schema_version` changes only when a field is removed
   "clock": Sourced<Clock> | null,      // PipeWire's global clock settings
   "pipewire_version": "1.2.7" | null,
   "stack": Stack,                      // which sound server and session manager are running
+  "wireplumber": WirePlumber,          // WirePlumber 0.5 settings Ratewise reads
   "notes": [ { "source": Source, "message": "plain-English explanation" } ]
 }
 ```
@@ -26,6 +27,26 @@ Stable output for scripts. `schema_version` changes only when a field is removed
 | `capabilities` | object | `rates`, `formats`, `channels`, `period_frames`, `buffer_frames`; each `Sourced<…>` or null. Period and buffer ranges come only from the kernel. |
 | `running` | `Sourced<Running>` \| null | What the hardware is doing now. |
 | `kernel_probe` | KernelProbe \| null | How the direct `/dev/snd` query went. null when it wasn't attempted (no ALSA device, or no kernel readings at all). |
+| `bluetooth` | Bluetooth \| null | Profiles and codec, for Bluetooth devices on PipeWire. |
+
+A Bluetooth card whose profile is off has no PipeWire node. It's still listed, with `id` set to its `device.name` (`bluez_card.…`), `pipewire` null and no capabilities.
+
+## Bluetooth
+
+| Field | Type | Notes |
+|---|---|---|
+| `card_name` | string | The card's `device.name`, e.g. `bluez_card.AA_BB_CC_DD_EE_FF`. Stable. |
+| `card_object_id` | number | PipeWire object id. Not stable across restarts. |
+| `profile` | string \| null | The active profile's name. |
+| `codec` | string \| null | The codec in use (`api.bluez5.codec`), e.g. `"ldac"`, `"aac"`, `"msbc"`. null when the card has no node. |
+| `profiles` | array | `{ "index", "name", "description", "available", "priority", "codec" }` for each profile. `codec` is null for a profile where PipeWire picks the codec. `index` changes between PipeWire versions; select profiles by name. |
+
+## WirePlumber
+
+| Field | Type | Notes |
+|---|---|---|
+| `headset_autoswitch` | bool \| null | `bluetooth.autoswitch-to-headset-profile` in effect. null on WirePlumber 0.4 or when unknown. |
+| `headset_autoswitch_saved` | bool \| null | The value stored with `wpctl settings --save`, which overrides config files. null if none. |
 
 Capabilities prefer the most direct source: the kernel's answer, then `/proc/asound` USB stream files, then PipeWire. A device that's in use can't be queried directly, so its capabilities come from the other sources.
 

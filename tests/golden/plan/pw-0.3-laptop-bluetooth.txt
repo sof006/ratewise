@@ -1,0 +1,58 @@
+Keep Bluetooth headsets in their mode when a program uses the microphone (saved).
+
+Steps
+  1. Create ~/.config/wireplumber/policy.lua.d/60-ratewise.lua
+     WirePlumber's Bluetooth headset switching.
+       @@ -0,0 +1,7 @@
+       +-- Written by Ratewise. It regenerates this file on every `ratewise set --save`,
+       +-- so edits here are lost. `ratewise reset` removes it.
+       +bluetooth_policy = bluetooth_policy or {}
+       +bluetooth_policy.policy = bluetooth_policy.policy or {}
+       +
+       +-- Keep Bluetooth headsets in their mode when a program uses the microphone.
+       +bluetooth_policy.policy["media-role.use-headset-profile"] = false
+  2. Create ~/.local/state/ratewise/saved.json
+     Ratewise's record of what it has saved.
+
+Notes
+  - For calls, switch the headset to headset mode yourself: its microphone is off until you do.
+
+Afterwards
+  Restart PipeWire, pipewire-pulse and WirePlumber for this to take effect. Sound stops for a moment. Add --restart to do it now, or run:
+    systemctl --user restart pipewire.service pipewire-pulse.service wireplumber.service
+
+Ratewise backs up every file first; `ratewise revert` undoes this.
+
+=====
+
+Set the LDAC quality of Bluetooth Headset to most stable connection (330 kbps) (saved).
+
+Steps
+  1. Create ~/.config/wireplumber/bluetooth.lua.d/60-ratewise.lua
+     WirePlumber rules for Bluetooth devices.
+       @@ -0,0 +1,16 @@
+       +-- Written by Ratewise. It regenerates this file on every `ratewise set --save`,
+       +-- so edits here are lost. `ratewise reset` removes it.
+       +bluez_monitor = bluez_monitor or {}
+       +bluez_monitor.rules = bluez_monitor.rules or {}
+       +
+       +-- Bluetooth Headset
+       +table.insert(bluez_monitor.rules, {
+       +  matches = {
+       +    {
+       +      { "device.name", "equals", "bluez_card.00_00_00_00_00_03" },
+       +    },
+       +  },
+       +  apply_properties = {
+       +    ["bluez5.a2dp.ldac.quality"] = "mq",
+       +  },
+       +})
+  2. Update ~/.local/state/ratewise/saved.json
+     Ratewise's record of what it has saved.
+
+Afterwards
+  Restart PipeWire, pipewire-pulse and WirePlumber for this to take effect. Sound stops for a moment. Add --restart to do it now, or run:
+    systemctl --user restart pipewire.service pipewire-pulse.service wireplumber.service
+  WirePlumber applies the LDAC quality when the headset connects, so after the restart turn the headset off and on again.
+
+Ratewise backs up every file first; `ratewise revert` undoes this.

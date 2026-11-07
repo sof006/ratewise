@@ -66,7 +66,8 @@
         },
         "source": "Procfs"
       },
-      "kernel_probe": null
+      "kernel_probe": null,
+      "bluetooth": null
     },
     {
       "id": "alsa:HDMI:3:playback",
@@ -94,7 +95,8 @@
         },
         "source": "Procfs"
       },
-      "kernel_probe": null
+      "kernel_probe": null,
+      "bluetooth": null
     },
     {
       "id": "alsa_output.pci-0000_03_00.1.hdmi-stereo-extra1",
@@ -146,7 +148,8 @@
         },
         "source": "Procfs"
       },
-      "kernel_probe": null
+      "kernel_probe": null,
+      "bluetooth": null
     },
     {
       "id": "alsa:HDMI:8:playback",
@@ -174,7 +177,8 @@
         },
         "source": "Procfs"
       },
-      "kernel_probe": null
+      "kernel_probe": null,
+      "bluetooth": null
     },
     {
       "id": "alsa:HDMI:9:playback",
@@ -202,7 +206,8 @@
         },
         "source": "Procfs"
       },
-      "kernel_probe": null
+      "kernel_probe": null,
+      "bluetooth": null
     },
     {
       "id": "alsa_output.usb-SteelSeries_Arctis_Nova_7-00.analog-stereo",
@@ -254,7 +259,8 @@
         },
         "source": "Procfs"
       },
-      "kernel_probe": null
+      "kernel_probe": null,
+      "bluetooth": null
     },
     {
       "id": "alsa_input.usb-SteelSeries_Arctis_Nova_7-00.mono-fallback",
@@ -306,7 +312,8 @@
         },
         "source": "Procfs"
       },
-      "kernel_probe": null
+      "kernel_probe": null,
+      "bluetooth": null
     }
   ],
   "clock": {
@@ -336,6 +343,10 @@
     "pulseaudio_version": null,
     "jack_running": false,
     "systemd_user_session": null
+  },
+  "wireplumber": {
+    "headset_autoswitch": true,
+    "headset_autoswitch_saved": null
   },
   "notes": [
     {

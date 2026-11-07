@@ -54,6 +54,63 @@ pub enum Change {
     /// `Set(false)` keeps the device open when idle.
     Suspend(Value<bool>),
     ResampleQuality(Value<u8>),
+    /// A Bluetooth card's profile, which picks both the mode and the codec. The text is
+    /// what the user asked for: a profile name (`a2dp-sink-ldac`), a mode (`headset`) or
+    /// a codec (`ldac`); [`crate::core::bluetooth::resolve`] finds the profile.
+    BluetoothProfile(String),
+    /// Whether WirePlumber switches Bluetooth headsets to headset mode when a program
+    /// opens the microphone. Global.
+    HeadsetAutoswitch(Value<bool>),
+    /// LDAC's bitrate on one Bluetooth device.
+    LdacQuality(Value<LdacQuality>),
+}
+
+/// `bluez5.a2dp.ldac.quality`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LdacQuality {
+    /// Adapts to the connection (PipeWire's default).
+    Auto,
+    /// 990 kbps.
+    Hq,
+    /// 660 kbps.
+    Sq,
+    /// 330 kbps.
+    Mq,
+}
+
+impl LdacQuality {
+    pub const ALL: [LdacQuality; 4] = [Self::Auto, Self::Hq, Self::Sq, Self::Mq];
+
+    /// The value PipeWire takes.
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Hq => "hq",
+            Self::Sq => "sq",
+            Self::Mq => "mq",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Auto => "adaptive",
+            Self::Hq => "best quality (990 kbps)",
+            Self::Sq => "standard (660 kbps)",
+            Self::Mq => "most stable connection (330 kbps)",
+        }
+    }
+
+    /// `hq`, `best`, `990`, ...
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s.trim().to_ascii_lowercase().as_str() {
+            "auto" | "adaptive" | "abr" => Self::Auto,
+            "hq" | "high" | "best" | "990" => Self::Hq,
+            "sq" | "standard" | "normal" | "660" => Self::Sq,
+            "mq" | "low" | "stable" | "connection" | "330" => Self::Mq,
+            _ => return None,
+        })
+    }
 }
 
 impl Change {
@@ -81,6 +138,9 @@ impl Change {
             Self::Headroom(_) => "headroom",
             Self::Suspend(_) => "suspend",
             Self::ResampleQuality(_) => "resample-quality",
+            Self::BluetoothProfile(_) => "profile",
+            Self::HeadsetAutoswitch(_) => "headset-autoswitch",
+            Self::LdacQuality(_) => "ldac-quality",
         }
     }
 
@@ -88,7 +148,11 @@ impl Change {
     pub fn is_device_only(&self) -> bool {
         matches!(
             self,
-            Self::PeriodSize(_) | Self::Headroom(_) | Self::Suspend(_)
+            Self::PeriodSize(_)
+                | Self::Headroom(_)
+                | Self::Suspend(_)
+                | Self::BluetoothProfile(_)
+                | Self::LdacQuality(_)
         )
     }
 
@@ -103,6 +167,7 @@ impl Change {
                 | Self::ForceRate(_)
                 | Self::ForceQuantum(_)
                 | Self::ResampleQuality(_)
+                | Self::HeadsetAutoswitch(_)
         )
     }
 
@@ -160,6 +225,33 @@ impl Change {
                 "the resampler quality".into(),
                 v.as_option().map(|q| q.to_string()),
             ),
+            Self::BluetoothProfile(want) => {
+                let name = device.map_or("the device", |d| d.description.as_str());
+                let profile = device
+                    .and_then(|d| d.bluetooth.as_ref())
+                    .and_then(|bt| crate::core::bluetooth::resolve(bt, want).ok());
+                match profile {
+                    Some(p) => format!(
+                        "switch {name} to {}",
+                        crate::core::bluetooth::profile_label(p)
+                    ),
+                    None => format!("switch {name} to the {want} profile"),
+                }
+            }
+            Self::HeadsetAutoswitch(Value::Set(true)) => {
+                "switch Bluetooth headsets to headset mode when a program uses the microphone"
+                    .into()
+            }
+            Self::HeadsetAutoswitch(Value::Set(false)) => {
+                "keep Bluetooth headsets in their mode when a program uses the microphone".into()
+            }
+            Self::HeadsetAutoswitch(Value::Default) => {
+                "set Bluetooth headset switching back to the default".into()
+            }
+            Self::LdacQuality(v) => to(
+                of("the LDAC quality"),
+                v.as_option().map(|q| q.label().to_string()),
+            ),
         }
     }
 }
@@ -192,6 +284,9 @@ pub struct SavedConfig {
     pub global: GlobalSaved,
     /// Keyed by device id (the PipeWire `node.name`, or `alsa:<card>:<dev>:<dir>`).
     pub devices: BTreeMap<String, DeviceSaved>,
+    /// Bluetooth settings, keyed by the card's `device.name` (`bluez_card.*`): a card's
+    /// nodes come and go with its profile, but the card's name stays.
+    pub bluetooth: BTreeMap<String, BluetoothSaved>,
     /// Set when Ratewise created `~/.config/pulse/daemon.conf`: a hash of what it
     /// wrote, so `reset` removes the file only if nobody has edited it since.
     pub created_pulse_daemon_conf: Option<String>,
@@ -203,6 +298,7 @@ impl Default for SavedConfig {
             version: SAVED_VERSION,
             global: GlobalSaved::default(),
             devices: BTreeMap::new(),
+            bluetooth: BTreeMap::new(),
             created_pulse_daemon_conf: None,
         }
     }
@@ -219,6 +315,21 @@ pub struct GlobalSaved {
     /// PulseAudio and ALSA only; PipeWire sets formats per device.
     pub format: Option<SampleFormat>,
     pub resample_quality: Option<u8>,
+    /// WirePlumber's `bluetooth.autoswitch-to-headset-profile`.
+    pub headset_autoswitch: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BluetoothSaved {
+    pub description: String,
+    #[serde(default)]
+    pub ldac_quality: Option<LdacQuality>,
+}
+
+impl BluetoothSaved {
+    pub fn is_empty(&self) -> bool {
+        self.ldac_quality.is_none()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -269,7 +380,9 @@ impl DeviceSaved {
 
 impl SavedConfig {
     pub fn is_empty(&self) -> bool {
-        self.global == GlobalSaved::default() && self.devices.is_empty()
+        self.global == GlobalSaved::default()
+            && self.devices.is_empty()
+            && self.bluetooth.is_empty()
     }
 
     /// The record with `change` applied. Live-only changes leave it unchanged.
@@ -285,7 +398,25 @@ impl SavedConfig {
             (Change::MaxQuantum(v), _) => g.max_quantum = v.clone().into_option(),
             (Change::Format(v), None) => g.format = v.clone().into_option(),
             (Change::ResampleQuality(v), _) => g.resample_quality = v.clone().into_option(),
-            (Change::ForceRate(_) | Change::ForceQuantum(_), _) => {}
+            (Change::HeadsetAutoswitch(v), _) => g.headset_autoswitch = v.clone().into_option(),
+            (Change::LdacQuality(v), Some(d)) => {
+                if let Some(bt) = &d.bluetooth {
+                    let entry = next
+                        .bluetooth
+                        .entry(bt.card_name.clone())
+                        .or_insert_with(|| BluetoothSaved {
+                            description: d.description.clone(),
+                            ldac_quality: None,
+                        });
+                    entry.description = d.description.clone();
+                    entry.ldac_quality = v.clone().into_option();
+                    if entry.is_empty() {
+                        next.bluetooth.remove(&bt.card_name);
+                    }
+                }
+            }
+            // WirePlumber remembers the profile itself.
+            (Change::ForceRate(_) | Change::ForceQuantum(_) | Change::BluetoothProfile(_), _) => {}
             (_, Some(d)) => {
                 let entry = next
                     .devices
@@ -308,7 +439,13 @@ impl SavedConfig {
                     next.devices.remove(&d.id);
                 }
             }
-            (Change::PeriodSize(_) | Change::Headroom(_) | Change::Suspend(_), None) => {}
+            (
+                Change::PeriodSize(_)
+                | Change::Headroom(_)
+                | Change::Suspend(_)
+                | Change::LdacQuality(_),
+                None,
+            ) => {}
         }
         next
     }
@@ -336,6 +473,7 @@ mod tests {
             capabilities: Capabilities::default(),
             running: None,
             kernel_probe: None,
+            bluetooth: None,
         }
     }
 

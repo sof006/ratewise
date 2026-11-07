@@ -11,12 +11,13 @@ use std::path::{Path, PathBuf};
 
 use similar::TextDiff;
 
+use crate::core::bluetooth;
 use crate::core::model::{
-    Device, DeviceKind, Direction, SampleFormat, SessionManager, Snapshot, SoundServer,
-    WirePlumberConfig, khz,
+    BluetoothMode, Device, DeviceKind, Direction, SampleFormat, SessionManager, Snapshot,
+    SoundServer, WirePlumberConfig, khz,
 };
 use crate::core::paths::Paths;
-use crate::core::settings::{Change, Mode, SavedConfig, Value, rate_list};
+use crate::core::settings::{Change, LdacQuality, Mode, SavedConfig, Value, rate_list};
 pub use verify::{Check, ClockKey, ClockValue, Expect, Outcome, render_checks, verify};
 
 /// A program to run, with its arguments.
@@ -362,6 +363,26 @@ fn support(
             | Change::ForceRate(_)
             | Change::ForceQuantum(_)
     ) && device.is_none();
+    match change {
+        Change::BluetoothProfile(_) => {
+            return (
+                bluetooth_device(ctx, device).and_then(|()| profile_tool(ctx)),
+                Err(
+                    "WirePlumber remembers the profile you pick for each device, so it stays \
+                     without saving. Apply it live instead."
+                        .to_string(),
+                ),
+            );
+        }
+        Change::HeadsetAutoswitch(_) => return autoswitch_support(ctx),
+        Change::LdacQuality(_) => {
+            return (
+                Err("WirePlumber applies it when the headset connects".to_string()),
+                bluetooth_device(ctx, device).and_then(|()| wireplumber_config(ctx).map(|_| ())),
+            );
+        }
+        _ => {}
+    }
     let live = match server {
         SoundServer::PipeWire if live_clock => Ok(()),
         SoundServer::PipeWire if device.is_some() => Err(
@@ -446,10 +467,15 @@ fn pipewire_device_support(ctx: &PlanContext, d: &Device) -> Result<(), String> 
             d.description
         ));
     }
+    wireplumber_config(ctx).map(|_| ())
+}
+
+/// The config format of the running WirePlumber, or why Ratewise can't write one.
+fn wireplumber_config(ctx: &PlanContext) -> Result<WirePlumberConfig, String> {
     match &ctx.snapshot.stack.session_manager {
         Some(SessionManager::WirePlumber {
-            config: Some(_), ..
-        }) => Ok(()),
+            config: Some(c), ..
+        }) => Ok(*c),
         Some(SessionManager::WirePlumber { config: None, .. }) | None => Err(
             "Ratewise can't tell which WirePlumber version is running, so it doesn't know which \
              config format to write. `ratewise doctor` shows what it found."
@@ -460,6 +486,72 @@ fn pipewire_device_support(ctx: &PlanContext, d: &Device) -> Result<(), String> 
              Switch to WirePlumber to set per-device options."
                 .to_string(),
         ),
+    }
+}
+
+/// WirePlumber's headset switching: live through `wpctl settings` (0.5 only), saved in
+/// either version's config.
+fn autoswitch_support(ctx: &PlanContext) -> (Result<(), String>, Result<(), String>) {
+    if ctx.snapshot.stack.server != SoundServer::PipeWire {
+        let why = "Ratewise sets this through WirePlumber, which isn't running. Use your \
+                   desktop's Bluetooth settings."
+            .to_string();
+        return (Err(why.clone()), Err(why));
+    }
+    let config = wireplumber_config(ctx);
+    let live = match &config {
+        Ok(WirePlumberConfig::SpaJson05) if ctx.has_tool("wpctl") => Ok(()),
+        Ok(WirePlumberConfig::SpaJson05) => Err(
+            "wpctl isn't installed. It comes with WirePlumber (usually the `wireplumber` package)"
+                .to_string(),
+        ),
+        Ok(WirePlumberConfig::Lua04) => {
+            Err("WirePlumber 0.4 reads it only when it starts".to_string())
+        }
+        Err(e) => Err(e.clone()),
+    };
+    (live, config.map(|_| ()))
+}
+
+/// Whether `device` is a Bluetooth device Ratewise can configure through PipeWire.
+fn bluetooth_device(ctx: &PlanContext, device: Option<&Device>) -> Result<(), String> {
+    let Some(d) = device else {
+        return Err("Pick a Bluetooth device with --device.".into());
+    };
+    if d.bluetooth.is_none() {
+        return Err(if d.kind == DeviceKind::Bluetooth {
+            format!(
+                "Ratewise can't see {}'s Bluetooth profiles: PipeWire didn't report its card. \
+                 Use your desktop's Bluetooth or sound settings.",
+                d.description
+            )
+        } else {
+            format!(
+                "{} isn't a Bluetooth device, so it has no Bluetooth profiles.",
+                d.description
+            )
+        });
+    }
+    if ctx.snapshot.stack.server != SoundServer::PipeWire {
+        return Err(
+            "Ratewise switches Bluetooth profiles through PipeWire, which isn't running. Use \
+             your desktop's Bluetooth or sound settings."
+                .into(),
+        );
+    }
+    Ok(())
+}
+
+/// Profiles are switched with `pw-cli`, which can ask WirePlumber to remember them.
+fn profile_tool(ctx: &PlanContext) -> Result<(), String> {
+    if ctx.has_tool("pw-cli") {
+        Ok(())
+    } else {
+        Err(
+            "pw-cli isn't installed, so Ratewise can't switch profiles. Install your \
+             distribution's PipeWire tools (often `pipewire-bin` or `pipewire-tools`)."
+                .into(),
+        )
     }
 }
 
@@ -482,6 +574,13 @@ fn pick_mode(
 ) -> Result<Mode, PlanError> {
     let (live, save) = support(ctx, change, device);
     let name = change.name();
+    // A profile is only ever switched live, so its live reason is the useful one.
+    if matches!(change, Change::BluetoothProfile(_))
+        && asked != Some(Mode::Save)
+        && let Err(why) = live
+    {
+        return refuse(why);
+    }
     match asked {
         Some(Mode::Live) => match live {
             Ok(()) => Ok(Mode::Live),
@@ -794,6 +893,59 @@ fn validate(
                 "The resampler quality goes from 0 (fastest) to 14 (best). PipeWire's default is 4.",
             );
         }
+        Change::BluetoothProfile(want) => {
+            let Some((d, bt)) = device.and_then(|d| Some((d, d.bluetooth.as_ref()?))) else {
+                return Ok(notes);
+            };
+            let p = bluetooth::resolve(bt, want).map_err(PlanError)?;
+            if bt.profile.as_deref() == Some(p.name.as_str()) {
+                return Ok(notes);
+            }
+            notes.push(format!(
+                "Sound on {} stops for a moment while it switches.",
+                d.description
+            ));
+            match p.mode() {
+                BluetoothMode::Headset if bt.mode() != BluetoothMode::Headset => notes.push(
+                    "Headset mode turns the microphone on, but sound drops to phone-call quality."
+                        .into(),
+                ),
+                BluetoothMode::HighQuality if bt.mode() == BluetoothMode::Headset => notes.push(
+                    "High quality mode has no microphone: the headset's microphone stops working."
+                        .into(),
+                ),
+                BluetoothMode::Off => notes.push(format!(
+                    "{} stays connected but plays nothing until you switch it back on.",
+                    d.description
+                )),
+                _ => {}
+            }
+        }
+        Change::LdacQuality(v) => {
+            let Some((d, bt)) = device.and_then(|d| Some((d, d.bluetooth.as_ref()?))) else {
+                return Ok(notes);
+            };
+            let ldac = bt.codec.as_deref() == Some("ldac")
+                || bt.profiles.iter().any(|p| p.codec() == Some("ldac"));
+            if !ldac && v.as_option().is_some() {
+                return refuse(format!(
+                    "{} doesn't offer LDAC, so there's no LDAC quality to set.",
+                    d.description
+                ));
+            }
+            if *v == Value::Set(LdacQuality::Hq) {
+                notes.push(
+                    "Highest quality (990 kbps) needs a strong Bluetooth connection. If the sound \
+                     drops out, pick adaptive (`auto`)."
+                        .into(),
+                );
+            }
+        }
+        Change::HeadsetAutoswitch(Value::Set(false)) => notes.push(
+            "For calls, switch the headset to headset mode yourself: its microphone is off \
+             until you do."
+                .into(),
+        ),
         _ => {}
     }
     Ok(notes)
@@ -865,7 +1017,11 @@ fn current_clock(ctx: &PlanContext, key: ClockKey) -> Option<ClockValue> {
 }
 
 fn plan_live(ctx: &PlanContext, items: &[(Change, Option<&Device>)]) -> Result<Plan, PlanError> {
-    if !ctx.has_tool("pw-metadata") {
+    let clock = items.iter().any(|(c, _)| clock_change(c).is_some());
+    let autoswitch = items
+        .iter()
+        .any(|(c, _)| matches!(c, Change::HeadsetAutoswitch(_)));
+    if clock && !ctx.has_tool("pw-metadata") {
         return refuse(
             "pw-metadata isn't installed, so live changes aren't possible. Install your \
              distribution's PipeWire tools, or use --save.",
@@ -873,9 +1029,26 @@ fn plan_live(ctx: &PlanContext, items: &[(Change, Option<&Device>)]) -> Result<P
     }
     let mut plan = Plan::new(
         PlanKind::Set(Mode::Live),
-        format!("{} (live, until PipeWire restarts).", titles(items)),
+        if clock {
+            format!("{} (live, until PipeWire restarts).", titles(items))
+        } else if autoswitch {
+            format!("{} (live, until WirePlumber restarts).", titles(items))
+        } else {
+            format!("{}.", titles(items))
+        },
     );
-    for (change, _) in items {
+    for (change, device) in items {
+        match change {
+            Change::BluetoothProfile(want) => {
+                bluetooth_steps(ctx, &mut plan, *device, want)?;
+                continue;
+            }
+            Change::HeadsetAutoswitch(v) => {
+                autoswitch_steps(ctx, &mut plan, v.as_option().copied());
+                continue;
+            }
+            _ => {}
+        }
         let (key, value) =
             clock_change(change).ok_or_else(|| PlanError("not a live setting".into()))?;
         let previous = current_clock(ctx, key);
@@ -905,6 +1078,104 @@ fn plan_live(ctx: &PlanContext, items: &[(Change, Option<&Device>)]) -> Result<P
         }
     }
     Ok(plan)
+}
+
+const AUTOSWITCH_KEY: &str = "bluetooth.autoswitch-to-headset-profile";
+
+/// `wpctl settings`, or `--reset` back to WirePlumber's built-in default.
+fn autoswitch_cmd(on: Option<bool>) -> Cmd {
+    match on {
+        Some(on) => Cmd::new("wpctl", &["settings", AUTOSWITCH_KEY, &on.to_string()]),
+        None => Cmd::new("wpctl", &["settings", "--reset", AUTOSWITCH_KEY]),
+    }
+}
+
+fn autoswitch_steps(ctx: &PlanContext, plan: &mut Plan, on: Option<bool>) {
+    let previous = ctx.snapshot.wireplumber.headset_autoswitch;
+    if previous.is_some() && previous == on {
+        plan.notes
+            .push("WirePlumber already uses that setting.".into());
+        return;
+    }
+    plan.steps.push(Step::Run {
+        cmd: autoswitch_cmd(on),
+        why: "Changes WirePlumber's Bluetooth headset switching now.".into(),
+        undo: Some(autoswitch_cmd(previous)),
+    });
+    plan.afterwards = Some(
+        "Live changes last until WirePlumber restarts. To keep them, save them instead (--save)."
+            .into(),
+    );
+}
+
+/// `pw-cli set-param` on the card, with `save: true` so WirePlumber remembers the
+/// profile for the device. `wpctl set-profile` only saves it from WirePlumber 0.5.11.
+fn profile_cmd(ctx: &PlanContext, bt: &crate::core::model::Bluetooth, index: u32) -> Cmd {
+    // pw-cli finds objects by name from PipeWire 0.3.44.
+    let by_name = ctx
+        .snapshot
+        .stack
+        .pipewire_version
+        .as_deref()
+        .and_then(crate::core::stack::parse_version)
+        .is_none_or(|v| v >= (0, 3, 44));
+    let card = if by_name {
+        bt.card_name.clone()
+    } else {
+        bt.card_object_id.to_string()
+    };
+    Cmd::new(
+        "pw-cli",
+        &[
+            "set-param",
+            &card,
+            "Profile",
+            &format!("{{ index: {index}, save: true }}"),
+        ],
+    )
+}
+
+/// Switches a Bluetooth card's profile. The index is looked up from the current
+/// snapshot each time, because PipeWire numbers profiles differently between versions.
+fn bluetooth_steps(
+    ctx: &PlanContext,
+    plan: &mut Plan,
+    device: Option<&Device>,
+    want: &str,
+) -> Result<(), PlanError> {
+    let Some((d, bt)) = device.and_then(|d| Some((d, d.bluetooth.as_ref()?))) else {
+        return refuse("Pick a Bluetooth device with --device.");
+    };
+    let p = bluetooth::resolve(bt, want).map_err(PlanError)?;
+    if bt.profile.as_deref() == Some(p.name.as_str()) {
+        plan.notes.push(format!(
+            "{} is already using {}.",
+            d.description,
+            bluetooth::profile_label(p)
+        ));
+        return Ok(());
+    }
+    let set = |index: u32| profile_cmd(ctx, bt, index);
+    plan.steps.push(Step::Run {
+        cmd: set(p.index),
+        why: format!(
+            "Switches {} to {} (profile {}).",
+            d.description,
+            bluetooth::profile_label(p),
+            p.name
+        ),
+        undo: bt.active().map(|a| set(a.index)),
+    });
+    plan.expect.push(Expect::BluetoothProfile {
+        card: bt.card_name.clone(),
+        description: d.description.clone(),
+        profile: p.name.clone(),
+        label: bluetooth::profile_label(p),
+    });
+    plan.afterwards = Some(
+        "WirePlumber remembers this profile for the device, including after it reconnects.".into(),
+    );
+    Ok(())
 }
 
 fn capitalise(s: &str) -> String {
@@ -958,24 +1229,47 @@ fn desired_files(ctx: &PlanContext, saved: &SavedConfig) -> Result<Desired, Plan
                 Some(SessionManager::WirePlumber { config, .. }) => *config,
                 _ => None,
             };
-            let rules05 = render::wireplumber_05(&saved.devices);
-            let rules04 = render::wireplumber_04(&saved.devices);
+            let rules05 = render::wireplumber_05(&saved);
             let why = "WirePlumber rules for per-device settings.";
             match config {
                 Some(WirePlumberConfig::SpaJson05) => {
-                    files.push((p.wireplumber_05(), rules05, why));
                     files.push((
-                        p.wireplumber_04(),
-                        None,
-                        "WirePlumber 0.4 rules, replaced by the 0.5 file.",
+                        p.wireplumber_05(),
+                        rules05,
+                        "WirePlumber settings and per-device rules.",
                     ));
+                    for old in [
+                        p.wireplumber_04(),
+                        p.wireplumber_bluetooth_04(),
+                        p.wireplumber_policy_04(),
+                    ] {
+                        files.push((
+                            old,
+                            None,
+                            "WirePlumber 0.4 rules, replaced by the 0.5 file.",
+                        ));
+                    }
                 }
                 Some(WirePlumberConfig::Lua04) => {
-                    files.push((p.wireplumber_04(), rules04, why));
+                    files.push((
+                        p.wireplumber_04(),
+                        render::wireplumber_04(&saved.devices),
+                        why,
+                    ));
+                    files.push((
+                        p.wireplumber_bluetooth_04(),
+                        render::wireplumber_bluetooth_04(&saved.bluetooth),
+                        "WirePlumber rules for Bluetooth devices.",
+                    ));
+                    files.push((
+                        p.wireplumber_policy_04(),
+                        render::wireplumber_policy_04(&saved.global),
+                        "WirePlumber's Bluetooth headset switching.",
+                    ));
                     files.push((
                         p.wireplumber_05(),
                         None,
-                        "WirePlumber 0.5 rules, replaced by the 0.4 file.",
+                        "WirePlumber 0.5 rules, replaced by the 0.4 files.",
                     ));
                 }
                 None if rules05.is_some() => {
@@ -1134,6 +1428,29 @@ fn plan_save(ctx: &PlanContext, items: &[(Change, Option<&Device>)]) -> Result<P
                 .into(),
         );
     }
+    if items
+        .iter()
+        .any(|(c, _)| matches!(c, Change::LdacQuality(_)))
+    {
+        plan.afterwards = Some(
+            "WirePlumber applies the LDAC quality when the headset connects, so after the restart \
+             turn the headset off and on again."
+                .into(),
+        );
+    }
+    if items
+        .iter()
+        .any(|(c, _)| matches!(c, Change::HeadsetAutoswitch(_)))
+        && let Some(stored) = ctx.snapshot.wireplumber.headset_autoswitch_saved
+        && wireplumber_config(ctx) == Ok(WirePlumberConfig::SpaJson05)
+    {
+        plan.notes.push(format!(
+            "WirePlumber has a stored value for this ({}, saved with `wpctl settings --save`), \
+             and it overrides config files. Remove it so Ratewise's setting is used: \
+             `wpctl settings --delete {AUTOSWITCH_KEY}`.",
+            if stored { "on" } else { "off" }
+        ));
+    }
     if let Some(asoundrc) = desired.files.iter().find(|f| f.0 == ctx.paths.asoundrc())
         && let Some(text) = &asoundrc.1
     {
@@ -1179,14 +1496,13 @@ fn finish(ctx: &PlanContext, plan: &mut Plan) {
     let touched: Vec<&Path> = plan.steps.iter().filter_map(Step::path).collect();
     let touches = |paths: &[PathBuf]| touched.iter().any(|t| paths.iter().any(|p| p == t));
     let systemd = stack.systemd_user_session == Some(true) && ctx.has_tool("systemctl");
-    let pipewire_files = [
+    let mut pipewire_files = vec![
         p.pipewire_dropin(),
         p.client_dropin(),
         p.client_rt_dropin(),
         p.pipewire_pulse_dropin(),
-        p.wireplumber_05(),
-        p.wireplumber_04(),
     ];
+    pipewire_files.extend(p.wireplumber_files());
     match stack.server {
         SoundServer::PipeWire if touches(&pipewire_files) => {
             let mut units = vec!["pipewire.service"];
@@ -1261,15 +1577,14 @@ pub fn plan_reset(ctx: &PlanContext) -> Result<Plan, PlanError> {
         PlanKind::Reset,
         "Remove every setting Ratewise has saved.".into(),
     );
-    let own = [
+    let mut own = vec![
         p.pipewire_dropin(),
         p.client_dropin(),
         p.client_rt_dropin(),
         p.pipewire_pulse_dropin(),
-        p.wireplumber_05(),
-        p.wireplumber_04(),
-        p.pulse_dropin(),
     ];
+    own.extend(p.wireplumber_files());
+    own.push(p.pulse_dropin());
     for path in own {
         match ctx.file(&path) {
             FileState::Text(old) => plan.steps.push(Step::Remove {

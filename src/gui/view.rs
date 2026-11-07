@@ -6,12 +6,13 @@ use slint::{ModelRc, SharedString, VecModel};
 use super::edits::Edits;
 use super::{Chip, ChipRow, ClockView, DeviceView, Fact, KV, NavItem, Opt};
 use crate::app::Inputs;
+use crate::core::bluetooth;
 use crate::core::model::{
-    Device, DeviceKind, Direction, KernelProbeStatus, Running, STANDARD_RATES, SampleFormat,
-    SoundServer, khz,
+    Bluetooth, BluetoothMode, Device, DeviceKind, Direction, KernelProbeStatus, Running,
+    STANDARD_RATES, SampleFormat, SoundServer, codec_label, khz,
 };
 use crate::core::plan::{self, PlanContext};
-use crate::core::settings::{Change, DeviceSaved, Value, rate_list};
+use crate::core::settings::{Change, DeviceSaved, LdacQuality, Value, rate_list};
 
 /// Rates offered in selectors. Higher ones appear only for devices that can use them.
 const COMMON_RATES: [u32; 10] = [
@@ -122,7 +123,15 @@ pub fn nav(inputs: &Inputs) -> Vec<NavItem> {
         ..Default::default()
     };
     let device = |d: &Device| {
-        let running = running_short(d);
+        let mut running = running_short(d);
+        if let Some(bt) = &d.bluetooth {
+            running = match (bt.mode(), bt.current_codec()) {
+                (BluetoothMode::Off, _) => "off".into(),
+                (_, Some(codec)) if running.is_empty() => codec_label(codec),
+                (_, Some(codec)) => format!("{} · {running}", codec_label(codec)),
+                _ => running,
+            };
+        }
         NavItem {
             kind: s("device"),
             key: s(format!("device:{}", d.id)),
@@ -280,9 +289,56 @@ pub fn device_view(c: &Ctx, d: &Device) -> DeviceView {
         ),
     ));
 
+    if let Some(bt) = &d.bluetooth {
+        // Rate, format and period come from the codec, so show the profile instead.
+        let pending_profile = match pending("profile") {
+            Some(Change::BluetoothProfile(want)) => bluetooth::resolve(bt, want).ok(),
+            _ => None,
+        };
+        configured = vec![
+            row(
+                "Mode",
+                match pending_profile {
+                    Some(p) => format!("{} (not applied yet)", bluetooth::profile_label(p)),
+                    None => bt.summary(),
+                },
+            ),
+            row("Rate & format", "Set by the codec".into()),
+            row(
+                "When idle",
+                describe(
+                    pending("suspend"),
+                    saved
+                        .filter(|s| s.disable_suspend)
+                        .map(|_| "Kept open".to_string()),
+                    "Suspends".into(),
+                ),
+            ),
+        ];
+    }
+
     // Supports.
     let caps = &d.capabilities;
     let mut supports = Vec::new();
+    if let Some(bt) = &d.bluetooth {
+        for (key, mode) in [
+            ("Codecs", BluetoothMode::HighQuality),
+            ("For calls", BluetoothMode::Headset),
+        ] {
+            let list = bt.codecs(mode);
+            if !list.is_empty() {
+                supports.push(KV {
+                    key: s(key),
+                    value: s(list
+                        .iter()
+                        .map(|c| codec_label(c))
+                        .collect::<Vec<_>>()
+                        .join(", ")),
+                    source: s("PipeWire"),
+                });
+            }
+        }
+    }
     let src = |source: crate::core::model::Source| s(source.label());
     let mut rate_rows = Vec::new();
     match &caps.rates {
@@ -369,6 +425,16 @@ pub fn device_view(c: &Ctx, d: &Device) -> DeviceView {
             facts.push(fact("warn", format!("Asking the driver failed: {message}.")))
         }
         _ => {}
+    }
+    if d.pipewire.is_none()
+        && d.bluetooth
+            .as_ref()
+            .is_some_and(|b| b.mode() == BluetoothMode::Off)
+    {
+        facts.push(fact(
+            "info",
+            "Its profile is off, so it's connected but plays nothing. Switch it on in the Bluetooth tab.".into(),
+        ));
     }
     if pipewire && d.pipewire.is_none() && d.kind != DeviceKind::Bluetooth {
         facts.push(fact(
@@ -532,6 +598,15 @@ pub fn device_view(c: &Ctx, d: &Device) -> DeviceView {
         Err(why) => (Vec::new(), why),
     };
 
+    let (bt_mode_opts, bt_codec_opts, bt_why) = match &d.bluetooth {
+        Some(bt) => bluetooth_opts(c, d, bt),
+        None => (Vec::new(), Vec::new(), String::new()),
+    };
+    let (ldac_opts, ldac_why) = match &d.bluetooth {
+        Some(bt) => ldac_opts(c, d, bt),
+        None => (Vec::new(), String::new()),
+    };
+
     let raw = serde_json::to_string_pretty(&serde_json::json!({
         "device": d,
         "saved": saved,
@@ -574,8 +649,147 @@ pub fn device_view(c: &Ctx, d: &Device) -> DeviceView {
         headroom_why: s(headroom_why),
         suspend_opts: model(suspend_opts),
         suspend_why: s(suspend_why),
+        bluetooth: d.bluetooth.is_some(),
+        bt_mode_opts: model(bt_mode_opts),
+        bt_codec_opts: model(bt_codec_opts),
+        bt_why: s(bt_why),
+        ldac_opts: model(ldac_opts),
+        ldac_why: s(ldac_why),
         raw: s(raw),
     }
+}
+
+/// LDAC quality, for devices that offer LDAC. Saved only.
+fn ldac_opts(c: &Ctx, d: &Device, bt: &Bluetooth) -> (Vec<Opt>, String) {
+    let ldac = bt.codec.as_deref() == Some("ldac")
+        || bt.profiles.iter().any(|p| p.codec() == Some("ldac"));
+    if !ldac {
+        return (Vec::new(), String::new());
+    }
+    let pc = c.plan();
+    if let Err(why) = plan::availability(&pc, &Change::LdacQuality(Value::Default), Some(d)).1 {
+        return (Vec::new(), why);
+    }
+    let selected = match c.edits.find("ldac-quality", Some(&d.id)) {
+        Some(Change::LdacQuality(v)) => v.as_option().map(|q| q.key()),
+        _ => c
+            .inputs
+            .saved
+            .bluetooth
+            .get(&bt.card_name)
+            .and_then(|b| b.ldac_quality)
+            .map(LdacQuality::key),
+    }
+    .unwrap_or("default");
+    let mut opts = vec![opt(
+        "default",
+        "Default",
+        selected == "default",
+        Ok(vec!["PipeWire's default: adapts to the connection.".into()]),
+    )];
+    for q in LdacQuality::ALL {
+        let label = match q {
+            LdacQuality::Auto => "Adaptive",
+            LdacQuality::Hq => "990 kbps",
+            LdacQuality::Sq => "660 kbps",
+            LdacQuality::Mq => "330 kbps",
+        };
+        opts.push(opt(
+            q.key(),
+            label,
+            selected == q.key(),
+            checked(&pc, Change::LdacQuality(Value::Set(q)), Some(d)).map(|mut w| {
+                w.insert(0, capitalise_first(q.label()));
+                w
+            }),
+        ));
+    }
+    (opts, String::new())
+}
+
+fn capitalise_first(s: &str) -> String {
+    let mut c = s.chars();
+    c.next()
+        .map(|f| f.to_uppercase().chain(c).collect())
+        .unwrap_or_default()
+}
+
+/// The Bluetooth tab: one option per mode, and the codecs of the mode in effect (the
+/// pending pick, else the profile in use). Every option is a profile name.
+fn bluetooth_opts(c: &Ctx, d: &Device, bt: &Bluetooth) -> (Vec<Opt>, Vec<Opt>, String) {
+    let pc = c.plan();
+    let (live, _) = plan::availability(&pc, &Change::BluetoothProfile(String::new()), Some(d));
+    // Read-only mode is handled by the action bar, as on every other page.
+    let why = live.err().unwrap_or_default();
+    let pending = match c.edits.find("profile", Some(&d.id)) {
+        Some(Change::BluetoothProfile(want)) => bluetooth::resolve(bt, want).ok(),
+        _ => None,
+    };
+    let effective = pending.or_else(|| bt.active());
+    let selected = |name: &str| effective.is_some_and(|p| p.name == name);
+    let check = |name: &str| {
+        if !why.is_empty() {
+            return Err(String::new());
+        }
+        checked(&pc, Change::BluetoothProfile(name.to_string()), Some(d))
+    };
+
+    let mut modes = Vec::new();
+    for m in bt.modes() {
+        let Some(p) = bluetooth::profile_for_mode(bt, m) else {
+            continue;
+        };
+        let tip = match m {
+            BluetoothMode::HighQuality => "Best sound (A2DP). The microphone is off.",
+            BluetoothMode::Headset => "Microphone on, phone-call sound quality (HFP/HSP).",
+            _ => "Stays connected but plays nothing.",
+        };
+        let label = match m {
+            BluetoothMode::Headset => "Headset",
+            m => m.label(),
+        };
+        let on = effective.is_some_and(|e| e.mode() == m);
+        modes.push(opt(
+            &p.name,
+            label,
+            on,
+            check(&p.name).map(|mut w| {
+                w.insert(0, tip.to_string());
+                w
+            }),
+        ));
+    }
+
+    let mut codecs = Vec::new();
+    if let Some(mode) = effective
+        .map(|p| p.mode())
+        .filter(|m| matches!(m, BluetoothMode::HighQuality | BluetoothMode::Headset))
+    {
+        for p in bt.profiles.iter().filter(|p| p.mode() == mode) {
+            let label = match p.codec() {
+                Some(codec) => codec_label(codec),
+                None => "Automatic".into(),
+            };
+            let check = if p.available {
+                check(&p.name).map(|mut w| {
+                    if p.codec().is_none() {
+                        w.insert(
+                            0,
+                            "Let PipeWire pick the best codec both sides support.".into(),
+                        );
+                    }
+                    w
+                })
+            } else {
+                Err(
+                    "Not available: the device or your Bluetooth adapter doesn't support it."
+                        .into(),
+                )
+            };
+            codecs.push(opt(&p.name, label, selected(&p.name), check));
+        }
+    }
+    (modes, codecs, why)
 }
 
 fn server_name(s: SoundServer) -> &'static str {
@@ -876,6 +1090,58 @@ pub fn clock_view(c: &Ctx) -> ClockView {
         Err(why) => (Vec::new(), why),
     };
 
+    // Bluetooth headset switching.
+    let headset_show = c
+        .inputs
+        .snapshot
+        .devices
+        .iter()
+        .any(|d| d.bluetooth.is_some())
+        || g.headset_autoswitch.is_some();
+    let (headset_opts, headset_why) = match avail(Change::HeadsetAutoswitch(Value::Default)) {
+        (Err(why), Err(_)) => (Vec::new(), why),
+        (live, _) => {
+            let selected = match pending("headset-autoswitch") {
+                Some(Change::HeadsetAutoswitch(v)) => v.as_option().copied(),
+                _ => g.headset_autoswitch,
+            };
+            let now = c.inputs.snapshot.wireplumber.headset_autoswitch;
+            let default_tip = match now {
+                Some(true) => "WirePlumber's default, switching now.",
+                Some(false) => "WirePlumber's default, not switching now.",
+                None => "WirePlumber's default: switch.",
+            };
+            let opts = vec![
+                opt("default", "Default", selected.is_none(), Ok(vec![default_tip.into()])),
+                opt(
+                    "on",
+                    "Switch",
+                    selected == Some(true),
+                    checked(&pc, Change::HeadsetAutoswitch(Value::Set(true)), None).map(|mut w| {
+                        w.insert(0, "Calls can use the headset's microphone.".into());
+                        w
+                    }),
+                ),
+                opt(
+                    "off",
+                    "Stay in high quality",
+                    selected == Some(false),
+                    checked(&pc, Change::HeadsetAutoswitch(Value::Set(false)), None).map(
+                        |mut w| {
+                            w.insert(0, "Sound stays at full quality; switch to headset mode yourself for calls.".into());
+                            w
+                        },
+                    ),
+                ),
+            ];
+            let why = match live {
+                Ok(()) => String::new(),
+                Err(why) => format!("Saved only: {why}."),
+            };
+            (opts, why)
+        }
+    };
+
     // What's saved.
     let mut saved = Vec::new();
     let kv = |key: &str, value: String| KV {
@@ -923,6 +1189,22 @@ pub fn clock_view(c: &Ctx) -> ClockView {
         }
         saved.push(kv(&d.description, parts.join(" · ")));
     }
+    if let Some(on) = g.headset_autoswitch {
+        saved.push(kv(
+            "Headsets",
+            if on {
+                "switch for calls"
+            } else {
+                "stay in high quality"
+            }
+            .into(),
+        ));
+    }
+    for b in c.inputs.saved.bluetooth.values() {
+        if let Some(q) = b.ldac_quality {
+            saved.push(kv(&b.description, format!("LDAC {}", q.label())));
+        }
+    }
     let can_reset = c.read_only.is_none() && plan::plan_reset(&pc).is_ok_and(|p| !p.is_empty());
 
     ClockView {
@@ -945,6 +1227,9 @@ pub fn clock_view(c: &Ctx) -> ClockView {
         force_why: s(force_why),
         resample_opts: model(resample_opts),
         resample_why: s(resample_why),
+        headset_show,
+        headset_opts: model(headset_opts),
+        headset_why: s(headset_why),
         saved: model(saved),
         can_reset,
     }
