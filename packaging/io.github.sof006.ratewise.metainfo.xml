@@ -29,6 +29,11 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.1.1" date="2026-11-07">
+      <description>
+        <p>Opens on more systems: fixes for minimal installs with no fonts, a crash with a partly bundled keyboard library, and machines where OpenGL fails.</p>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-11-07">
       <description>
         <p>First release: device list, per-device and global settings, review and revert.</p>
