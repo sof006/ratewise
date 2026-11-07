@@ -82,7 +82,7 @@ pub fn run(dir: &Path) -> anyhow::Result<()> {
     let proc = Path::new("/proc/asound");
     if proc.is_dir() {
         let mut files = 0;
-        copy_tree(proc, &dir.join("proc-asound"), 0, &mut files)?;
+        copy_tree(proc, &dir.join("proc-asound"), &mut redactor, 0, &mut files)?;
         summary.push(format!("proc-asound/ ({files} files)"));
     } else {
         summary.push("no proc-asound/: /proc/asound doesn't exist here".into());
@@ -132,7 +132,15 @@ pub fn run(dir: &Path) -> anyhow::Result<()> {
     super::emit(&msg)
 }
 
-fn copy_tree(src: &Path, dst: &Path, depth: usize, files: &mut usize) -> anyhow::Result<()> {
+/// Copies a /proc tree. Text files are redacted too: `oss/sndstat` carries a
+/// `uname` line with the host name.
+fn copy_tree(
+    src: &Path,
+    dst: &Path,
+    redactor: &mut Redactor,
+    depth: usize,
+    files: &mut usize,
+) -> anyhow::Result<()> {
     if depth > MAX_DEPTH {
         return Ok(());
     }
@@ -149,13 +157,16 @@ fn copy_tree(src: &Path, dst: &Path, depth: usize, files: &mut usize) -> anyhow:
         let from = entry.path();
         let to = dst.join(entry.file_name());
         if ft.is_dir() {
-            copy_tree(&from, &to, depth + 1, files)?;
+            copy_tree(&from, &to, redactor, depth + 1, files)?;
         } else if ft.is_file() {
             // /proc files report size 0, so read them rather than copying by size.
             let mut buf = Vec::new();
             match fs::File::open(&from).and_then(|f| f.take(MAX_FILE_BYTES).read_to_end(&mut buf)) {
                 Ok(_) => {
-                    fs::write(&to, &buf)?;
+                    match String::from_utf8(buf) {
+                        Ok(text) => fs::write(&to, redactor.redact_text(&text))?,
+                        Err(e) => fs::write(&to, e.into_bytes())?,
+                    }
                     *files += 1;
                 }
                 Err(e) => {
@@ -217,4 +228,35 @@ fn versions(env: &EnvFacts) -> String {
         s.push_str(&format!("systemd-user-session: {yn}\n"));
     }
     s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn copied_proc_files_are_redacted() {
+        let tmp = std::env::temp_dir().join(format!("ratewise-copy-{}", std::process::id()));
+        let (src, dst) = (tmp.join("src"), tmp.join("dst"));
+        fs::create_dir_all(src.join("oss")).unwrap();
+        fs::write(
+            src.join("oss/sndstat"),
+            "Kernel: Linux myhost 7.3.1 #1 SMP x86_64\n",
+        )
+        .unwrap();
+        fs::write(src.join("blob"), [0xffu8, 0xfe, 0x00]).unwrap();
+
+        let mut r = Redactor::new();
+        r.add_word("myhost");
+        let mut files = 0;
+        copy_tree(&src, &dst, &mut r, 0, &mut files).unwrap();
+
+        assert_eq!(files, 2);
+        assert_eq!(
+            fs::read_to_string(dst.join("oss/sndstat")).unwrap(),
+            "Kernel: Linux REDACTED 7.3.1 #1 SMP x86_64\n"
+        );
+        assert_eq!(fs::read(dst.join("blob")).unwrap(), [0xffu8, 0xfe, 0x00]);
+        fs::remove_dir_all(&tmp).unwrap();
+    }
 }

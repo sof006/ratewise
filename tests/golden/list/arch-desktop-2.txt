@@ -1,0 +1,69 @@
+Outputs
+  E30 II Lite Headphones — USB, default
+    running   48 kHz · 32-bit (S32_LE) · 2 ch · period 512 (10.7 ms) · buffer 32768 (682.7 ms)  [from /proc/asound]
+    rates     44.1, 48, 88.2, 96, 176.4, 192, 352.8, 384, 705.6, 768 kHz  [from /proc/asound]
+    formats   S32_LE (32-bit), DSD_U32_BE  [from /proc/asound]
+    channels  2  [from /proc/asound]
+    kernel    busy: another program has it open, so the details above come from other sources
+    id        alsa_output.usb-Topping_E30_II_Lite-00.HiFi__Headphones__sink
+    alsa      hw:CARD=Lite,DEV=0
+  HDA ATI HDMI: HDMI 0 — HDMI
+    running   idle  [from /proc/asound]
+    rates     32, 44.1, 48, 88.2, 96, 176.4, 192 kHz  [from kernel]
+    formats   S16_LE (16-bit), S32_LE (32-bit)  [from kernel]
+    channels  2, 4, 6, 8  [from kernel]
+    period    4–524288 frames  [from kernel]
+    buffer    8–1048576 frames  [from kernel]
+    id        alsa:HDMI:3:playback
+    alsa      hw:CARD=HDMI,DEV=3
+  Navi 48 HDMI/DP Audio Controller Digital Stereo (HDMI 2) [BenQ GW2490E] — HDMI
+    running   idle  [from /proc/asound]
+    rates     32, 44.1, 48 kHz  [from kernel]
+    formats   S16_LE (16-bit), S32_LE (32-bit)  [from kernel]
+    channels  2  [from kernel]
+    period    16–524288 frames  [from kernel]
+    buffer    32–1048576 frames  [from kernel]
+    id        alsa_output.pci-0000_03_00.1.hdmi-stereo-extra1
+    alsa      hw:CARD=HDMI,DEV=7
+  HDA ATI HDMI: HDMI 2 — HDMI
+    running   idle  [from /proc/asound]
+    rates     32, 44.1, 48 kHz  [from kernel]
+    formats   S16_LE (16-bit), S32_LE (32-bit)  [from kernel]
+    channels  2  [from kernel]
+    period    16–524288 frames  [from kernel]
+    buffer    32–1048576 frames  [from kernel]
+    id        alsa:HDMI:8:playback
+    alsa      hw:CARD=HDMI,DEV=8
+  HDA ATI HDMI: HDMI 3 — HDMI
+    running   idle  [from /proc/asound]
+    rates     32, 44.1, 48, 88.2, 96, 176.4, 192 kHz  [from kernel]
+    formats   S16_LE (16-bit), S32_LE (32-bit)  [from kernel]
+    channels  2, 4, 6, 8  [from kernel]
+    period    4–524288 frames  [from kernel]
+    buffer    8–1048576 frames  [from kernel]
+    id        alsa:HDMI:9:playback
+    alsa      hw:CARD=HDMI,DEV=9
+  Arctis Nova 7 Analog Stereo — USB
+    running   idle  [from /proc/asound]
+    rates     48 kHz  [from kernel]
+    formats   S24_3LE (24-bit)  [from kernel]
+    channels  2  [from kernel]
+    period    48–48000 frames  [from kernel]
+    buffer    96–96000 frames  [from kernel]
+    id        alsa_output.usb-SteelSeries_Arctis_Nova_7-00.analog-stereo
+    alsa      hw:CARD=A7,DEV=0
+
+Inputs
+  Arctis Nova 7 Mono — USB, default
+    running   idle  [from /proc/asound]
+    rates     48 kHz  [from kernel]
+    formats   S16_LE (16-bit)  [from kernel]
+    channels  1  [from kernel]
+    period    48–48000 frames  [from kernel]
+    buffer    96–96000 frames  [from kernel]
+    id        alsa_input.usb-SteelSeries_Arctis_Nova_7-00.mono-fallback
+    alsa      hw:CARD=A7,DEV=0
+
+Sound server: PipeWire 1.6.10 · WirePlumber 0.5.18 · pipewire-pulse
+PipeWire clock: default 48 kHz · allowed 48 kHz · quantum 1024 (min 32, max 2048)  [from PipeWire]
+

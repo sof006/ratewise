@@ -12,6 +12,7 @@ use ratewise::probe::Probes;
 
 const FIXTURES: &[&str] = &[
     "arch-desktop",
+    "arch-desktop-2",
     "pw-1.2-desktop",
     "pw-0.3-laptop",
     "alsa-only",
@@ -305,5 +306,77 @@ fn real_arch_desktop() {
         clock.allowed_rates,
         Some(vec![48_000]),
         "SPA-JSON string in 1.6"
+    );
+}
+
+/// Real capture after M2, same machine: adds kernel.json and processes.txt.
+#[test]
+fn real_arch_desktop_with_kernel_readings() {
+    let snap = snapshot("arch-desktop-2");
+    assert!(snap.notes.is_empty(), "{:?}", snap.notes);
+    assert_eq!(snap.devices.len(), 7);
+
+    let st = &snap.stack;
+    assert_eq!(st.server, SoundServer::PipeWire);
+    assert!(st.pipewire_pulse);
+    assert_eq!(
+        st.session_manager,
+        wireplumber("0.5.18", WirePlumberConfig::SpaJson05)
+    );
+    // pipewire-pulse reports a compatibility version (15.0.0); it isn't a real PulseAudio.
+    assert_eq!(st.pulseaudio_version, None);
+    assert_eq!(st.systemd_user_session, Some(true));
+
+    // Playing during capture, so the kernel said busy and /proc/asound answered.
+    let dac = device(
+        &snap,
+        "alsa_output.usb-Topping_E30_II_Lite-00.HiFi__Headphones__sink",
+    );
+    assert_eq!(dac.kernel_probe, Some(KernelProbeStatus::Busy));
+    assert_eq!(
+        dac.capabilities.rates.as_ref().unwrap().source,
+        Source::Procfs
+    );
+    assert!(dac.capabilities.period_frames.is_none());
+
+    // The connected monitor's limits come from the driver, via the monitor's ELD.
+    let benq = device(&snap, "alsa_output.pci-0000_03_00.1.hdmi-stereo-extra1");
+    let rates = benq.capabilities.rates.as_ref().unwrap();
+    assert_eq!(rates.source, Source::Kernel);
+    assert_eq!(rates.value, RateSet::discrete([32_000, 44_100, 48_000]));
+    assert_eq!(benq.capabilities.channels.as_ref().unwrap().value, vec![2]);
+
+    // An unconnected HDMI port offers the driver defaults; odd channel counts are refused.
+    let unused = device(&snap, "alsa:HDMI:3:playback");
+    assert_eq!(
+        unused.capabilities.channels.as_ref().unwrap().value,
+        vec![2, 4, 6, 8]
+    );
+    assert_eq!(
+        unused
+            .capabilities
+            .rates
+            .as_ref()
+            .unwrap()
+            .value
+            .standard_rates()
+            .len(),
+        7
+    );
+
+    let headset = device(
+        &snap,
+        "alsa_output.usb-SteelSeries_Arctis_Nova_7-00.analog-stereo",
+    );
+    assert_eq!(
+        headset.capabilities.formats.as_ref().unwrap(),
+        &ratewise::core::model::Sourced::new(vec![SampleFormat::S24_3Le], Source::Kernel)
+    );
+    assert_eq!(
+        headset.capabilities.period_frames.as_ref().unwrap().value,
+        FrameRange {
+            min: 48,
+            max: 48_000
+        }
     );
 }
