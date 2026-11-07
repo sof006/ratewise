@@ -2,6 +2,11 @@
 // handles every callback; this file is layout and presentation only.
 
 import { Button, CheckBox, ListView, Palette, ScrollView, Slider, TabWidget, TextEdit } from "std-widgets.slint";
+// Inter 4.1 (SIL OFL 1.1, see assets/fonts/Inter-LICENSE.txt), embedded so text looks
+// the same everywhere and doesn't depend on fontconfig. The UI uses these three weights.
+import "../assets/fonts/Inter-Regular.ttf";
+import "../assets/fonts/Inter-SemiBold.ttf";
+import "../assets/fonts/Inter-Bold.ttf";
 import { Card, Chip, ChipRow, ChipStrip, Fact, FactLine, Field, KV, KVRow, Opt, Segmented, Tag, Theme, ToggleChips } from "widgets.slint";
 
 export { Opt, Chip, ChipRow, KV, Fact, Theme }
@@ -595,6 +600,7 @@ export component AppWindow inherits Window {
     min-height: 620px;
     background: Palette.background;
     default-font-size: 13px;
+    default-font-family: "Inter";
 
     in property <[NavItem]> nav;
     in-out property <string> selected;

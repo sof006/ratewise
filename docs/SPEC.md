@@ -143,7 +143,7 @@ The toolkit is **Slint**, using its own renderer.
 
 ### Feel
 - Follow the system light/dark theme where it can be detected, and offer a manual toggle.
-- Use an embedded UI font (Inter or Noto Sans, OFL) so text looks identical everywhere and doesn't depend on fontconfig.
+- Use an embedded UI font (Inter or Noto Sans, OFL) so text looks identical everywhere and doesn't depend on fontconfig. Ratewise embeds Inter 4.1's static Regular, SemiBold and Bold from `assets/fonts/` (licence alongside; ship it in the AppImage too). Monospace text (the doctor report, diffs) uses the system's monospace font, found with `fc-match`.
 - Keep it consistent: 8 px spacing grid, one accent colour, no clutter. Empty and error states need real wording, e.g. "No sound devices found. This usually means you don't have access to /dev/snd. Are you in the `audio` group, or running inside a container?"
 - It must be fully keyboard-navigable, and must stay usable at 1280×720 and on HiDPI.
 
