@@ -12,13 +12,14 @@ use std::path::{Path, PathBuf};
 use similar::TextDiff;
 
 use crate::core::bluetooth;
+use crate::core::lc3;
 use crate::core::model::{
     BluetoothMode, Device, DeviceKind, Direction, SampleFormat, SessionManager, Snapshot,
     SoundServer, WirePlumberConfig, khz,
 };
 use crate::core::paths::Paths;
 use crate::core::settings::{
-    Change, LdacQuality, LeAudioLatency, Mode, SavedConfig, Value, rate_list,
+    Change, LdacQuality, LeAudioLatency, LeAudioQos, Mode, SavedConfig, Value, rate_list,
 };
 pub use verify::{Check, ClockKey, ClockValue, Expect, Outcome, render_checks, verify};
 
@@ -383,7 +384,7 @@ fn support(
                 bluetooth_device(ctx, device).and_then(|()| wireplumber_config(ctx).map(|_| ())),
             );
         }
-        Change::LeAudioLatency(_) => {
+        Change::LeAudioLatency(_) | Change::LeAudioQos(_) => {
             return (
                 Err("WirePlumber applies it when the headset connects".to_string()),
                 bluetooth_device(ctx, device)
@@ -523,7 +524,7 @@ fn autoswitch_support(ctx: &PlanContext) -> (Result<(), String>, Result<(), Stri
     (live, config.map(|_| ()))
 }
 
-/// The LE Audio latency is `bluez5.bap.force-target-latency`, new in PipeWire 1.6.
+/// The LE Audio settings are `bluez5.bap.*` device properties, new in PipeWire 1.6.
 fn le_audio_support(ctx: &PlanContext) -> Result<(), String> {
     let version = ctx
         .snapshot
@@ -533,7 +534,7 @@ fn le_audio_support(ctx: &PlanContext) -> Result<(), String> {
         .or(ctx.snapshot.pipewire_version.as_deref());
     match version.and_then(crate::core::stack::parse_version) {
         Some(v) if v < (1, 6, 0) => Err(format!(
-            "Choosing the LE Audio latency needs PipeWire 1.6 or newer, and this is PipeWire {}.",
+            "LE Audio settings need PipeWire 1.6 or newer, and this is PipeWire {}.",
             version.unwrap_or_default()
         )),
         _ => Ok(()),
@@ -990,6 +991,113 @@ fn validate(
                         .into(),
                 ),
                 Value::Default => {}
+            }
+            let preset = ctx
+                .saved
+                .bluetooth
+                .get(&bt.card_name)
+                .and_then(|b| b.le_audio_qos.preset.as_deref())
+                .and_then(lc3::find);
+            if let (Some(p), Some(l)) = (preset, v.as_option())
+                && p.target() != l.key()
+            {
+                notes.push(format!(
+                    "The saved preset {} is a {} one, so PipeWire ignores it while the latency \
+                     is {}.",
+                    p.name,
+                    p.target().replace('-', " "),
+                    l.label()
+                ));
+            }
+            notes.push(
+                "It applies only while the device uses LE Audio (LC3). PipeWire marks this \
+                 setting as experimental."
+                    .into(),
+            );
+        }
+        Change::LeAudioQos(q) => {
+            let Some((d, bt)) = device.and_then(|d| Some((d, d.bluetooth.as_ref()?))) else {
+                return Ok(notes);
+            };
+            if !bluetooth::is_le_audio(bt) && !q.is_default() {
+                return refuse(format!(
+                    "{} doesn't offer LE Audio, so there are no LE Audio link settings to set.",
+                    d.description
+                ));
+            }
+            let saved = ctx.saved.bluetooth.get(&bt.card_name);
+            let device_may_refuse = "If the device doesn't accept it, sound won't start over \
+                                     LE Audio: set it back to Auto.";
+            match q {
+                LeAudioQos::Preset(Value::Set(name)) => {
+                    let Some(p) = lc3::find(name) else {
+                        return refuse(format!(
+                            "\"{name}\" isn't an LC3 preset PipeWire knows. Use one such as \
+                             `48_5_1` (`ratewise set le-audio-preset --help` lists them)."
+                        ));
+                    };
+                    notes.push(format!("{}: {}.", p.name, capitalise(&p.describe())));
+                    notes.push(
+                        "If the device can't use this preset, PipeWire ignores it and picks one \
+                         itself."
+                            .into(),
+                    );
+                    if let Some(l) = saved.and_then(|b| b.le_audio_latency)
+                        && l.key() != p.target()
+                    {
+                        notes.push(format!(
+                            "The LE Audio latency is set to {}, so PipeWire ignores {} until \
+                             you set the latency to balanced.",
+                            l.label(),
+                            p.name
+                        ));
+                    }
+                }
+                LeAudioQos::Retransmissions(Value::Set(_)) => {
+                    notes.push(
+                        "More retransmissions mean fewer dropouts but more delay. The Bluetooth \
+                         controller treats the number as a suggestion."
+                            .into(),
+                    );
+                    notes.push(
+                        "It replaces the retransmissions of whichever preset is used.".into(),
+                    );
+                }
+                LeAudioQos::TransportLatency(Value::Set(ms)) => {
+                    if !lc3::TRANSPORT_LATENCY_MS.contains(ms) {
+                        return refuse(format!(
+                            "The maximum transport latency must be from {} to {} ms.",
+                            lc3::TRANSPORT_LATENCY_MS.start(),
+                            lc3::TRANSPORT_LATENCY_MS.end()
+                        ));
+                    }
+                    notes.push(format!(
+                        "It must not be more than the device allows. {device_may_refuse}"
+                    ));
+                }
+                LeAudioQos::PresentationDelay(Value::Set(us)) => {
+                    if *us > lc3::MAX_PRESENTATION_DELAY_US {
+                        return refuse(format!(
+                            "The presentation delay must be at most {}.",
+                            lc3::ms_text(lc3::MAX_PRESENTATION_DELAY_US)
+                        ));
+                    }
+                    notes.push(format!(
+                        "It must lie in the range the device supports (PipeWire asks for {}). \
+                         {device_may_refuse}",
+                        lc3::ms_text(lc3::DEFAULT_PRESENTATION_DELAY_US)
+                    ));
+                }
+                LeAudioQos::Framing(Value::Set(framed)) => {
+                    if !framed {
+                        notes.push(
+                            "44.1 kHz audio needs framing: unframed breaks the 44.1 kHz presets."
+                                .into(),
+                        );
+                    }
+                    notes.push(device_may_refuse.into());
+                }
+                _ => {}
             }
             notes.push(
                 "It applies only while the device uses LE Audio (LC3). PipeWire marks this \
@@ -1489,12 +1597,12 @@ fn plan_save(ctx: &PlanContext, items: &[(Change, Option<&Device>)]) -> Result<P
         .any(|(c, _)| matches!(c, Change::LdacQuality(_)));
     let le_audio = items
         .iter()
-        .any(|(c, _)| matches!(c, Change::LeAudioLatency(_)));
+        .any(|(c, _)| matches!(c, Change::LeAudioLatency(_) | Change::LeAudioQos(_)));
     if ldac || le_audio {
         let what = match (ldac, le_audio) {
-            (true, true) => "the LDAC quality and LE Audio latency",
+            (true, true) => "the LDAC quality and LE Audio settings",
             (true, false) => "the LDAC quality",
-            _ => "the LE Audio latency",
+            _ => "the LE Audio settings",
         };
         plan.afterwards = Some(format!(
             "WirePlumber applies {what} when the headset connects, so after the restart turn \

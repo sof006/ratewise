@@ -14,7 +14,9 @@ use ratewise::core::plan::{
     render_plan,
 };
 use ratewise::core::select::select;
-use ratewise::core::settings::{Change, LdacQuality, LeAudioLatency, Mode, SavedConfig, Value};
+use ratewise::core::settings::{
+    Change, LdacQuality, LeAudioLatency, LeAudioQos, Mode, SavedConfig, Value,
+};
 use ratewise::probe::Probes;
 
 const SYSTEM_PULSE: &str =
@@ -996,6 +998,97 @@ fn le_audio_latency_saved_for_pipewire_1_6() {
     assert!(w.files.values().all(|f| *f == FileState::Missing));
 }
 
+fn qos(name: &str, value: &str) -> Change {
+    Change::LeAudioQos(LeAudioQos::parse(name, value).unwrap())
+}
+
+#[test]
+fn le_audio_preset_and_link_settings_saved() {
+    let mut w = World::new("pw-1.6-le-audio");
+    let text = w.run(&[
+        (qos("le-audio-preset", "48_5_1"), Some(HEADPHONES), save()),
+        (
+            qos("le-audio-retransmissions", "3"),
+            Some(HEADPHONES),
+            save(),
+        ),
+        (
+            qos("le-audio-transport-latency", "20"),
+            Some(HEADPHONES),
+            save(),
+        ),
+        (
+            qos("le-audio-presentation-delay", "25"),
+            Some(HEADPHONES),
+            save(),
+        ),
+        (
+            qos("le-audio-framing", "unframed"),
+            Some(HEADPHONES),
+            save(),
+        ),
+    ]);
+    assert_golden("plan/pw-1.6-le-audio-qos.txt", &text);
+    w.dump_files("pw-1.6-le-audio-qos");
+    let conf = w.file(&w.paths.wireplumber_05()).unwrap();
+    for line in [
+        r#"bluez5.bap.preset = "48_5_1""#,
+        r#"bluez5.bap.rtn = "3""#,
+        r#"bluez5.bap.latency = "20""#,
+        r#"bluez5.bap.delay = "25000""#,
+        r#"bluez5.bap.framing = "false""#,
+    ] {
+        assert!(conf.contains(line), "{line} in {conf}");
+    }
+
+    for (change, want) in [
+        (qos("le-audio-transport-latency", "4"), "from 5 to 4000 ms"),
+        (
+            qos("le-audio-transport-latency", "4001"),
+            "from 5 to 4000 ms",
+        ),
+        (qos("le-audio-presentation-delay", "20000"), "at most"),
+    ] {
+        let e = w.plan(change, Some(HEADPHONES), save()).unwrap_err();
+        assert!(e.contains(want), "{e}");
+    }
+    let e = w
+        .plan(qos("le-audio-preset", "48_5_1"), Some(SPEAKER), save())
+        .unwrap_err();
+    assert!(e.contains("doesn't offer LE Audio"), "{e}");
+    assert!(LeAudioQos::parse("le-audio-preset", "48_9_1").is_err());
+
+    // A reliable latency hides the low-latency preset: both sides say so.
+    let p = w
+        .plan(
+            Change::LeAudioLatency(Value::Set(LeAudioLatency::Reliable)),
+            Some(HEADPHONES),
+            save(),
+        )
+        .unwrap();
+    assert!(
+        p.notes.iter().any(|n| n.contains("PipeWire ignores it")),
+        "{:?}",
+        p.notes
+    );
+    w.apply(&p);
+    let p = w
+        .plan(qos("le-audio-preset", "48_6_1"), Some(HEADPHONES), save())
+        .unwrap();
+    assert!(
+        p.notes
+            .iter()
+            .any(|n| n.contains("PipeWire ignores 48_6_1")),
+        "{:?}",
+        p.notes
+    );
+
+    let reset = plan::plan_reset(&w.ctx()).unwrap();
+    w.apply(&reset);
+    assert!(w.saved.is_empty());
+    assert!(w.files.values().all(|f| *f == FileState::Missing));
+}
+
 #[test]
 fn le_audio_latency_needs_pipewire_1_6() {
     let w = World::new("pw-1.2-desktop");
@@ -1005,6 +1098,10 @@ fn le_audio_latency_needs_pipewire_1_6() {
             Some(HEADPHONES),
             save(),
         )
+        .unwrap_err();
+    assert!(e.contains("PipeWire 1.6 or newer"), "{e}");
+    let e = w
+        .plan(qos("le-audio-preset", "48_2_2"), Some(HEADPHONES), save())
         .unwrap_err();
     assert!(e.contains("PipeWire 1.6 or newer"), "{e}");
 }

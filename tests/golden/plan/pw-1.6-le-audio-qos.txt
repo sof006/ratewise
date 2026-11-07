@@ -1,0 +1,145 @@
+Set the LE Audio LC3 preset of LE Audio Earbuds to 48_5_1 (saved).
+
+Steps
+  1. Create ~/.config/wireplumber/wireplumber.conf.d/60-ratewise.conf
+     WirePlumber settings and per-device rules.
+       @@ -0,0 +1,15 @@
+       +# Written by Ratewise. It regenerates this file on every `ratewise set --save`,
+       +# so edits here are lost. `ratewise reset` removes it.
+       +monitor.bluez.rules = [
+       +  {
+       +    # LE Audio Earbuds
+       +    matches = [
+       +      { device.name = "bluez_card.00_00_00_00_00_01" }
+       +    ]
+       +    actions = {
+       +      update-props = {
+       +        bluez5.bap.preset = "48_5_1"
+       +      }
+       +    }
+       +  }
+       +]
+  2. Create ~/.local/state/ratewise/saved.json
+     Ratewise's record of what it has saved.
+
+Notes
+  - 48_5_1: 48 kHz, 7.5 ms frames, 124.8 kbps per channel, low latency: up to 15 ms on the link, 5 retransmissions.
+  - If the device can't use this preset, PipeWire ignores it and picks one itself.
+  - It applies only while the device uses LE Audio (LC3). PipeWire marks this setting as experimental.
+
+Afterwards
+  Restart PipeWire, pipewire-pulse and WirePlumber for this to take effect. Sound stops for a moment. Add --restart to do it now, or run:
+    systemctl --user restart pipewire.service pipewire-pulse.service wireplumber.service
+  WirePlumber applies the LE Audio settings when the headset connects, so after the restart turn the headset off and on again.
+
+Ratewise backs up every file first; `ratewise revert` undoes this.
+
+=====
+
+Set the LE Audio retransmissions of LE Audio Earbuds to 3 (saved).
+
+Steps
+  1. Update ~/.config/wireplumber/wireplumber.conf.d/60-ratewise.conf
+     WirePlumber settings and per-device rules.
+       @@ -10,4 +10,5 @@
+              update-props = {
+                bluez5.bap.preset = "48_5_1"
+       +        bluez5.bap.rtn = "3"
+              }
+            }
+  2. Update ~/.local/state/ratewise/saved.json
+     Ratewise's record of what it has saved.
+
+Notes
+  - More retransmissions mean fewer dropouts but more delay. The Bluetooth controller treats the number as a suggestion.
+  - It replaces the retransmissions of whichever preset is used.
+  - It applies only while the device uses LE Audio (LC3). PipeWire marks this setting as experimental.
+
+Afterwards
+  Restart PipeWire, pipewire-pulse and WirePlumber for this to take effect. Sound stops for a moment. Add --restart to do it now, or run:
+    systemctl --user restart pipewire.service pipewire-pulse.service wireplumber.service
+  WirePlumber applies the LE Audio settings when the headset connects, so after the restart turn the headset off and on again.
+
+Ratewise backs up every file first; `ratewise revert` undoes this.
+
+=====
+
+Set the LE Audio maximum transport latency of LE Audio Earbuds to 20 ms (saved).
+
+Steps
+  1. Update ~/.config/wireplumber/wireplumber.conf.d/60-ratewise.conf
+     WirePlumber settings and per-device rules.
+       @@ -11,4 +11,5 @@
+                bluez5.bap.preset = "48_5_1"
+                bluez5.bap.rtn = "3"
+       +        bluez5.bap.latency = "20"
+              }
+            }
+  2. Update ~/.local/state/ratewise/saved.json
+     Ratewise's record of what it has saved.
+
+Notes
+  - It must not be more than the device allows. If the device doesn't accept it, sound won't start over LE Audio: set it back to Auto.
+  - It applies only while the device uses LE Audio (LC3). PipeWire marks this setting as experimental.
+
+Afterwards
+  Restart PipeWire, pipewire-pulse and WirePlumber for this to take effect. Sound stops for a moment. Add --restart to do it now, or run:
+    systemctl --user restart pipewire.service pipewire-pulse.service wireplumber.service
+  WirePlumber applies the LE Audio settings when the headset connects, so after the restart turn the headset off and on again.
+
+Ratewise backs up every file first; `ratewise revert` undoes this.
+
+=====
+
+Set the LE Audio presentation delay of LE Audio Earbuds to 25 ms (saved).
+
+Steps
+  1. Update ~/.config/wireplumber/wireplumber.conf.d/60-ratewise.conf
+     WirePlumber settings and per-device rules.
+       @@ -12,4 +12,5 @@
+                bluez5.bap.rtn = "3"
+                bluez5.bap.latency = "20"
+       +        bluez5.bap.delay = "25000"
+              }
+            }
+  2. Update ~/.local/state/ratewise/saved.json
+     Ratewise's record of what it has saved.
+
+Notes
+  - It must lie in the range the device supports (PipeWire asks for 40 ms). If the device doesn't accept it, sound won't start over LE Audio: set it back to Auto.
+  - It applies only while the device uses LE Audio (LC3). PipeWire marks this setting as experimental.
+
+Afterwards
+  Restart PipeWire, pipewire-pulse and WirePlumber for this to take effect. Sound stops for a moment. Add --restart to do it now, or run:
+    systemctl --user restart pipewire.service pipewire-pulse.service wireplumber.service
+  WirePlumber applies the LE Audio settings when the headset connects, so after the restart turn the headset off and on again.
+
+Ratewise backs up every file first; `ratewise revert` undoes this.
+
+=====
+
+Set the LE Audio framing of LE Audio Earbuds to unframed (saved).
+
+Steps
+  1. Update ~/.config/wireplumber/wireplumber.conf.d/60-ratewise.conf
+     WirePlumber settings and per-device rules.
+       @@ -13,4 +13,5 @@
+                bluez5.bap.latency = "20"
+                bluez5.bap.delay = "25000"
+       +        bluez5.bap.framing = "false"
+              }
+            }
+  2. Update ~/.local/state/ratewise/saved.json
+     Ratewise's record of what it has saved.
+
+Notes
+  - 44.1 kHz audio needs framing: unframed breaks the 44.1 kHz presets.
+  - If the device doesn't accept it, sound won't start over LE Audio: set it back to Auto.
+  - It applies only while the device uses LE Audio (LC3). PipeWire marks this setting as experimental.
+
+Afterwards
+  Restart PipeWire, pipewire-pulse and WirePlumber for this to take effect. Sound stops for a moment. Add --restart to do it now, or run:
+    systemctl --user restart pipewire.service pipewire-pulse.service wireplumber.service
+  WirePlumber applies the LE Audio settings when the headset connects, so after the restart turn the headset off and on again.
+
+Ratewise backs up every file first; `ratewise revert` undoes this.

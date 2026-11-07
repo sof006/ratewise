@@ -66,6 +66,143 @@ pub enum Change {
     /// Whether LE Audio (LC3) on one Bluetooth device favours low latency or a reliable
     /// connection. `Default` is PipeWire's balanced choice.
     LeAudioLatency(Value<LeAudioLatency>),
+    /// One of the LE Audio link settings PipeWire lets you set by hand.
+    LeAudioQos(LeAudioQos),
+}
+
+/// A manual LE Audio (LC3) link setting on one Bluetooth device. `Default` leaves it to
+/// PipeWire. All are `bluez5.bap.*` device properties, new in PipeWire 1.6.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LeAudioQos {
+    /// `bluez5.bap.preset`: a name from [`crate::core::lc3::PRESETS`].
+    Preset(Value<String>),
+    /// `bluez5.bap.rtn`.
+    Retransmissions(Value<u8>),
+    /// `bluez5.bap.latency`: the maximum transport latency, in ms.
+    TransportLatency(Value<u16>),
+    /// `bluez5.bap.delay`: the presentation delay, in µs.
+    PresentationDelay(Value<u32>),
+    /// `bluez5.bap.framing`: `true` is framed.
+    Framing(Value<bool>),
+}
+
+impl LeAudioQos {
+    /// The CLI names, in display order.
+    pub const NAMES: [&'static str; 5] = [
+        "le-audio-preset",
+        "le-audio-retransmissions",
+        "le-audio-transport-latency",
+        "le-audio-presentation-delay",
+        "le-audio-framing",
+    ];
+
+    pub fn name(&self) -> &'static str {
+        Self::NAMES[match self {
+            Self::Preset(_) => 0,
+            Self::Retransmissions(_) => 1,
+            Self::TransportLatency(_) => 2,
+            Self::PresentationDelay(_) => 3,
+            Self::Framing(_) => 4,
+        }]
+    }
+
+    /// "LC3 preset", "maximum transport latency", ...
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Preset(_) => "LC3 preset",
+            Self::Retransmissions(_) => "retransmissions",
+            Self::TransportLatency(_) => "maximum transport latency",
+            Self::PresentationDelay(_) => "presentation delay",
+            Self::Framing(_) => "framing",
+        }
+    }
+
+    pub fn is_default(&self) -> bool {
+        self.text().is_none()
+    }
+
+    /// The value in words: "48_5_1", "5", "20 ms", "40 ms", "framed". None for default.
+    pub fn text(&self) -> Option<String> {
+        use crate::core::lc3::ms_text;
+        match self {
+            Self::Preset(v) => v.as_option().cloned(),
+            Self::Retransmissions(v) => v.as_option().map(|n| n.to_string()),
+            Self::TransportLatency(v) => v.as_option().map(|ms| format!("{ms} ms")),
+            Self::PresentationDelay(v) => v.as_option().map(|us| ms_text(*us)),
+            Self::Framing(v) => v
+                .as_option()
+                .map(|f| if *f { "framed" } else { "unframed" }.to_string()),
+        }
+    }
+
+    /// What a text field shows for it: the number alone ("40", "7.5"), or "" for default.
+    pub fn input(&self) -> String {
+        match self {
+            Self::TransportLatency(Value::Set(ms)) => ms.to_string(),
+            Self::PresentationDelay(Value::Set(us)) => crate::core::lc3::ms_number(*us),
+            other => other.text().unwrap_or_default(),
+        }
+    }
+
+    /// The setting called `name` (one of [`Self::NAMES`]) at `value`. `auto` and
+    /// `default` go back to PipeWire's choice. Latency and delay are in ms.
+    pub fn parse(name: &str, value: &str) -> Result<Self, String> {
+        let v = value.trim();
+        let auto = matches!(
+            v.to_ascii_lowercase().as_str(),
+            "" | "auto" | "default" | "automatic" | "unset" | "none"
+        );
+        let num = |unit: &str| -> String {
+            let t = v.to_ascii_lowercase();
+            t.strip_suffix(unit).unwrap_or(&t).trim().to_string()
+        };
+        let bad = |hint: &str| format!("\"{v}\": {hint}, or `auto`");
+        Ok(match name {
+            "le-audio-preset" => Self::Preset(if auto {
+                Value::Default
+            } else {
+                let p = crate::core::lc3::find(v)
+                    .ok_or_else(|| bad("use an LC3 preset name such as `48_5_1`"))?;
+                Value::Set(p.name.to_string())
+            }),
+            "le-audio-retransmissions" => Self::Retransmissions(if auto {
+                Value::Default
+            } else {
+                Value::Set(
+                    num("")
+                        .parse()
+                        .map_err(|_| bad("use a number from 0 to 255"))?,
+                )
+            }),
+            "le-audio-transport-latency" => Self::TransportLatency(if auto {
+                Value::Default
+            } else {
+                Value::Set(
+                    num("ms")
+                        .parse()
+                        .map_err(|_| bad("use a whole number of milliseconds"))?,
+                )
+            }),
+            "le-audio-presentation-delay" => Self::PresentationDelay(if auto {
+                Value::Default
+            } else {
+                Value::Set(
+                    crate::core::lc3::parse_delay(v)
+                        .ok_or_else(|| bad("use milliseconds, such as `40` or `7.5`"))?,
+                )
+            }),
+            "le-audio-framing" => Self::Framing(if auto {
+                Value::Default
+            } else {
+                Value::Set(match v.to_ascii_lowercase().as_str() {
+                    "framed" | "true" | "yes" | "on" | "1" => true,
+                    "unframed" | "false" | "no" | "off" | "0" => false,
+                    _ => return Err(bad("use `framed` or `unframed`")),
+                })
+            }),
+            other => return Err(format!("\"{other}\" isn't an LE Audio setting")),
+        })
+    }
 }
 
 /// `bluez5.bap.force-target-latency`: which of the LE Audio (BAP) QoS tables PipeWire
@@ -185,6 +322,7 @@ impl Change {
             Self::HeadsetAutoswitch(_) => "headset-autoswitch",
             Self::LdacQuality(_) => "ldac-quality",
             Self::LeAudioLatency(_) => "le-audio-latency",
+            Self::LeAudioQos(q) => q.name(),
         }
     }
 
@@ -198,6 +336,7 @@ impl Change {
                 | Self::BluetoothProfile(_)
                 | Self::LdacQuality(_)
                 | Self::LeAudioLatency(_)
+                | Self::LeAudioQos(_)
         )
     }
 
@@ -301,6 +440,13 @@ impl Change {
                 of("the LE Audio latency"),
                 Some(v.as_option().map_or("balanced", |l| l.label()).to_string()),
             ),
+            Self::LeAudioQos(q) => {
+                let what = of(&format!("the LE Audio {}", q.label()));
+                match q.text() {
+                    Some(v) => format!("set {what} to {v}"),
+                    None => format!("set {what} back to automatic"),
+                }
+            }
         }
     }
 }
@@ -375,11 +521,77 @@ pub struct BluetoothSaved {
     pub ldac_quality: Option<LdacQuality>,
     #[serde(default)]
     pub le_audio_latency: Option<LeAudioLatency>,
+    #[serde(default, skip_serializing_if = "LeAudioQosSaved::is_empty")]
+    pub le_audio_qos: LeAudioQosSaved,
 }
 
 impl BluetoothSaved {
     pub fn is_empty(&self) -> bool {
-        self.ldac_quality.is_none() && self.le_audio_latency.is_none()
+        self.ldac_quality.is_none()
+            && self.le_audio_latency.is_none()
+            && self.le_audio_qos.is_empty()
+    }
+}
+
+/// The manual LE Audio link settings saved for one device. Unset fields are left out of
+/// `saved.json`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LeAudioQosSaved {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preset: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retransmissions: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transport_latency_ms: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub presentation_delay_us: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub framed: Option<bool>,
+}
+
+impl LeAudioQosSaved {
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+
+    pub fn set(&mut self, q: &LeAudioQos) {
+        match q {
+            LeAudioQos::Preset(v) => self.preset = v.clone().into_option(),
+            LeAudioQos::Retransmissions(v) => self.retransmissions = v.clone().into_option(),
+            LeAudioQos::TransportLatency(v) => self.transport_latency_ms = v.clone().into_option(),
+            LeAudioQos::PresentationDelay(v) => {
+                self.presentation_delay_us = v.clone().into_option()
+            }
+            LeAudioQos::Framing(v) => self.framed = v.clone().into_option(),
+        }
+    }
+
+    /// The saved value of the setting called `name`, as a change to it.
+    pub fn get(&self, name: &str) -> Option<LeAudioQos> {
+        fn v<T>(o: Option<T>) -> Value<T> {
+            o.map_or(Value::Default, Value::Set)
+        }
+        Some(match name {
+            "le-audio-preset" => LeAudioQos::Preset(v(self.preset.clone())),
+            "le-audio-retransmissions" => LeAudioQos::Retransmissions(v(self.retransmissions)),
+            "le-audio-transport-latency" => {
+                LeAudioQos::TransportLatency(v(self.transport_latency_ms))
+            }
+            "le-audio-presentation-delay" => {
+                LeAudioQos::PresentationDelay(v(self.presentation_delay_us))
+            }
+            "le-audio-framing" => LeAudioQos::Framing(v(self.framed)),
+            _ => return None,
+        })
+    }
+
+    /// Every setting, set or not, in display order.
+    pub fn all(&self) -> Vec<LeAudioQos> {
+        LeAudioQos::NAMES
+            .iter()
+            .filter_map(|n| self.get(n))
+            .collect()
     }
 }
 
@@ -450,7 +662,10 @@ impl SavedConfig {
             (Change::Format(v), None) => g.format = v.clone().into_option(),
             (Change::ResampleQuality(v), _) => g.resample_quality = v.clone().into_option(),
             (Change::HeadsetAutoswitch(v), _) => g.headset_autoswitch = v.clone().into_option(),
-            (Change::LdacQuality(_) | Change::LeAudioLatency(_), Some(d)) => {
+            (
+                Change::LdacQuality(_) | Change::LeAudioLatency(_) | Change::LeAudioQos(_),
+                Some(d),
+            ) => {
                 if let Some(bt) = &d.bluetooth {
                     let entry = next
                         .bluetooth
@@ -459,6 +674,7 @@ impl SavedConfig {
                             description: d.description.clone(),
                             ldac_quality: None,
                             le_audio_latency: None,
+                            le_audio_qos: LeAudioQosSaved::default(),
                         });
                     entry.description = d.description.clone();
                     match change {
@@ -466,6 +682,7 @@ impl SavedConfig {
                         Change::LeAudioLatency(v) => {
                             entry.le_audio_latency = v.clone().into_option()
                         }
+                        Change::LeAudioQos(q) => entry.le_audio_qos.set(q),
                         _ => {}
                     }
                     if entry.is_empty() {
@@ -502,7 +719,8 @@ impl SavedConfig {
                 | Change::Headroom(_)
                 | Change::Suspend(_)
                 | Change::LdacQuality(_)
-                | Change::LeAudioLatency(_),
+                | Change::LeAudioLatency(_)
+                | Change::LeAudioQos(_),
                 None,
             ) => {}
         }

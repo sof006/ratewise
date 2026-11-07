@@ -4,15 +4,20 @@
 use slint::{ModelRc, SharedString, VecModel};
 
 use super::edits::Edits;
-use super::{Chip, ChipRow, ClockView, DeviceView, Fact, KV, Line, NavItem, Opt, Stat};
+use super::{
+    Chip, ChipRow, ClockView, DeviceView, Fact, KV, Line, NavItem, Opt, PresetRow, QosField, Stat,
+};
 use crate::app::Inputs;
 use crate::core::bluetooth;
+use crate::core::lc3;
 use crate::core::model::{
     Bluetooth, BluetoothMode, Device, DeviceKind, Direction, KernelProbeStatus, Running,
     SampleFormat, SoundServer, codec_label, khz,
 };
 use crate::core::plan::{self, PlanContext};
-use crate::core::settings::{Change, DeviceSaved, LdacQuality, LeAudioLatency, Value, rate_list};
+use crate::core::settings::{
+    Change, DeviceSaved, LdacQuality, LeAudioLatency, LeAudioQos, Value, rate_list,
+};
 
 /// Rates offered in selectors. Higher ones appear only for devices that can use them.
 const COMMON_RATES: [u32; 10] = [
@@ -678,9 +683,9 @@ pub fn device_view(c: &Ctx, d: &Device) -> DeviceView {
         Some(bt) => bluetooth_opts(c, d, bt),
         None => (Vec::new(), Vec::new(), String::new()),
     };
-    let (le_latency_opts, le_latency_why) = match &d.bluetooth {
-        Some(bt) => le_latency_opts(c, d, bt),
-        None => (Vec::new(), String::new()),
+    let le = match &d.bluetooth {
+        Some(bt) => le_audio_parts(c, d, bt),
+        None => LeAudioParts::default(),
     };
     let (ldac_opts, ldac_why) = match &d.bluetooth {
         Some(bt) => ldac_opts(c, d, bt),
@@ -740,8 +745,15 @@ pub fn device_view(c: &Ctx, d: &Device) -> DeviceView {
         bt_why: s(bt_why),
         ldac_opts: model(ldac_opts),
         ldac_why: s(ldac_why),
-        le_latency_opts: model(le_latency_opts),
-        le_latency_why: s(le_latency_why),
+        le_audio: le.show,
+        le_why: s(le.why),
+        le_latency_opts: model(le.latency),
+        le_preset_rows: model(le.preset_rows),
+        le_preset_current: s(le.preset_current),
+        le_preset_note: s(le.preset_note),
+        le_preset_set: le.preset_set,
+        le_fields: model(le.fields),
+        le_framing_opts: model(le.framing),
         raw: s(raw),
     }
 }
@@ -794,31 +806,48 @@ fn ldac_opts(c: &Ctx, d: &Device, bt: &Bluetooth) -> (Vec<Opt>, String) {
     (opts, String::new())
 }
 
-/// LE Audio latency, for devices that offer LE Audio. Saved only.
-fn le_latency_opts(c: &Ctx, d: &Device, bt: &Bluetooth) -> (Vec<Opt>, String) {
+/// The LE Audio section of the Bluetooth tab. Empty for devices without LE Audio.
+#[derive(Default)]
+struct LeAudioParts {
+    show: bool,
+    /// Why none of it can be changed here.
+    why: String,
+    latency: Vec<Opt>,
+    preset_rows: Vec<PresetRow>,
+    preset_current: String,
+    preset_note: String,
+    preset_set: bool,
+    fields: Vec<QosField>,
+    framing: Vec<Opt>,
+}
+
+/// LE Audio's latency, preset and manual link settings. All saved only.
+fn le_audio_parts(c: &Ctx, d: &Device, bt: &Bluetooth) -> LeAudioParts {
     if !bluetooth::is_le_audio(bt) {
-        return (Vec::new(), String::new());
+        return LeAudioParts::default();
     }
     let pc = c.plan();
-    let change = |v| Change::LeAudioLatency(v);
-    if let Err(why) = plan::availability(&pc, &change(Value::Default), Some(d)).1 {
-        return (Vec::new(), why);
+    let latency_change = |v| Change::LeAudioLatency(v);
+    if let Err(why) = plan::availability(&pc, &latency_change(Value::Default), Some(d)).1 {
+        return LeAudioParts {
+            show: true,
+            why,
+            ..Default::default()
+        };
     }
-    let selected = match c.edits.find("le-audio-latency", Some(&d.id)) {
+    let saved = c.inputs.saved.bluetooth.get(&bt.card_name);
+
+    let latency_key = match c.edits.find("le-audio-latency", Some(&d.id)) {
         Some(Change::LeAudioLatency(v)) => v.as_option().map(|l| l.key()),
-        _ => c
-            .inputs
-            .saved
-            .bluetooth
-            .get(&bt.card_name)
+        _ => saved
             .and_then(|b| b.le_audio_latency)
             .map(LeAudioLatency::key),
     }
     .unwrap_or("default");
-    let mut opts = vec![opt(
+    let mut latency = vec![opt(
         "default",
         "Balanced",
-        selected == "default",
+        latency_key == "default",
         Ok(vec![
             "PipeWire's default: it weighs latency against reliability itself.".into(),
         ]),
@@ -828,17 +857,165 @@ fn le_latency_opts(c: &Ctx, d: &Device, bt: &Bluetooth) -> (Vec<Opt>, String) {
             LeAudioLatency::Low => ("Low latency", "Less delay, for games and video."),
             LeAudioLatency::Reliable => ("Reliable", "Fewer dropouts, more delay."),
         };
-        opts.push(opt(
+        latency.push(opt(
             l.key(),
             label,
-            selected == l.key(),
-            checked(&pc, change(Value::Set(l)), Some(d)).map(|mut w| {
+            latency_key == l.key(),
+            checked(&pc, latency_change(Value::Set(l)), Some(d)).map(|mut w| {
                 w.insert(0, tip.to_string());
                 w
             }),
         ));
     }
-    (opts, String::new())
+
+    // Each manual setting as it stands: the pending edit, else what's saved.
+    let saved_qos = saved.map(|b| b.le_audio_qos.clone()).unwrap_or_default();
+    let qos = |name: &str| match c.edits.find(name, Some(&d.id)) {
+        Some(Change::LeAudioQos(q)) => q.clone(),
+        _ => saved_qos
+            .get(name)
+            .unwrap_or(LeAudioQos::Preset(Value::Default)),
+    };
+    let preset = match qos("le-audio-preset") {
+        LeAudioQos::Preset(Value::Set(name)) => lc3::find(&name),
+        _ => None,
+    };
+    let preset_rows = lc3::RATES
+        .iter()
+        .map(|&rate| {
+            let chips = |reliable: bool| {
+                let opts: Vec<Opt> = lc3::PRESETS
+                    .iter()
+                    .filter(|p| p.rate == rate && p.reliable == reliable)
+                    .map(|p| {
+                        let change = LeAudioQos::Preset(Value::Set(p.name.to_string()));
+                        opt(
+                            p.name,
+                            p.config(),
+                            preset.is_some_and(|q| q.name == p.name),
+                            checked(&pc, Change::LeAudioQos(change), Some(d)),
+                        )
+                    })
+                    .collect();
+                model(opts)
+            };
+            PresetRow {
+                label: s(format!("{} kHz", khz(rate))),
+                low: chips(false),
+                reliable: chips(true),
+            }
+        })
+        .collect();
+    let preset_current = match preset {
+        Some(p) => format!("{}: {}.", p.name, capitalise_first(&p.describe())),
+        None => "Automatic: PipeWire picks the best preset both sides support.".into(),
+    };
+    let preset_note = match preset {
+        Some(p) if latency_key != "default" && latency_key != p.target() => format!(
+            "PipeWire ignores {} while the latency is {}. Set the latency to Balanced to use it.",
+            p.name,
+            if p.reliable {
+                "Low latency"
+            } else {
+                "Reliable"
+            }
+        ),
+        _ => String::new(),
+    };
+
+    let auto = |what: Option<String>| what.map_or_else(|| "Auto".into(), |v| format!("Auto ({v})"));
+    let fields = [
+        (
+            "le-audio-retransmissions",
+            "Retransmissions",
+            "How often a lost packet is sent again. More means fewer dropouts but more delay.",
+            "times",
+            auto(preset.map(|p| p.retransmissions.to_string())),
+        ),
+        (
+            "le-audio-transport-latency",
+            "Maximum transport latency",
+            "The most time a packet may spend on the link, retransmissions included.",
+            "ms",
+            auto(preset.map(|p| p.latency_ms.to_string())),
+        ),
+        (
+            "le-audio-presentation-delay",
+            "Presentation delay",
+            "How long after a packet's reference point the device plays it. Both earbuds use \
+             the same delay, which keeps them in sync.",
+            "ms",
+            auto(Some(lc3::ms_number(lc3::DEFAULT_PRESENTATION_DELAY_US))),
+        ),
+    ]
+    .into_iter()
+    .map(|(name, title, help, unit, placeholder)| {
+        let q = qos(name);
+        let why = if q.is_default() {
+            String::new()
+        } else {
+            checked(&pc, Change::LeAudioQos(q.clone()), Some(d))
+                .err()
+                .unwrap_or_default()
+        };
+        QosField {
+            kind: s(name),
+            title: s(title),
+            help: s(help),
+            value: s(q.input()),
+            unit: s(unit),
+            placeholder: s(placeholder),
+            why: s(why),
+            decimal: name == "le-audio-presentation-delay",
+        }
+    })
+    .collect();
+
+    let framed = match qos("le-audio-framing") {
+        LeAudioQos::Framing(Value::Set(f)) => Some(f),
+        _ => None,
+    };
+    let framing_check = |f: bool| {
+        checked(
+            &pc,
+            Change::LeAudioQos(LeAudioQos::Framing(Value::Set(f))),
+            Some(d),
+        )
+    };
+    let framing = vec![
+        opt(
+            "default",
+            "Auto",
+            framed.is_none(),
+            Ok(vec![
+                "The preset's: framed at 44.1 kHz, unframed otherwise.".into(),
+            ]),
+        ),
+        opt(
+            "framed",
+            "Framed",
+            framed == Some(true),
+            framing_check(true),
+        ),
+        opt(
+            "unframed",
+            "Unframed",
+            framed == Some(false),
+            framing_check(false),
+        ),
+    ];
+
+    LeAudioParts {
+        show: true,
+        why: String::new(),
+        latency,
+        preset_rows,
+        preset_current,
+        preset_note,
+        preset_set: preset.is_some(),
+        fields,
+        framing,
+    }
 }
 
 fn capitalise_first(s: &str) -> String {
@@ -1341,6 +1518,11 @@ pub fn clock_view(c: &Ctx) -> ClockView {
         if let Some(l) = b.le_audio_latency {
             saved.push(kv(&b.description, format!("LE Audio {}", l.label())));
         }
+        for q in b.le_audio_qos.all() {
+            if let Some(v) = q.text() {
+                saved.push(kv(&b.description, format!("LE Audio {}: {v}", q.label())));
+            }
+        }
     }
     let can_reset = c.read_only.is_none() && plan::plan_reset(&pc).is_ok_and(|p| !p.is_empty());
 
@@ -1693,7 +1875,7 @@ mod tests {
         assert_eq!(v.rate_opts.row_count(), 0);
         // AAC headphones: no LE Audio, so no latency row at all.
         assert_eq!(v.le_latency_opts.row_count(), 0);
-        assert_eq!(v.le_latency_why, "");
+        assert!(!v.le_audio);
     }
 
     #[test]
@@ -1712,7 +1894,43 @@ mod tests {
             read_only: None,
         };
         let v = device_view(&c, bt);
-        assert_eq!(v.le_latency_why, "");
+        assert!(v.le_audio);
+        assert_eq!(v.le_why, "");
+        assert!(!v.le_preset_set);
+        assert!(v.le_preset_current.starts_with("Automatic"));
+        let rows: Vec<(String, usize, usize)> = v
+            .le_preset_rows
+            .iter()
+            .map(|r| {
+                (
+                    r.label.to_string(),
+                    r.low.row_count(),
+                    r.reliable.row_count(),
+                )
+            })
+            .collect();
+        assert_eq!(rows[0], ("48 kHz".into(), 6, 6));
+        assert_eq!(rows[1], ("44.1 kHz".into(), 2, 2));
+        assert_eq!(rows.len(), 6);
+        let fields: Vec<(String, String, String)> = v
+            .le_fields
+            .iter()
+            .map(|f| {
+                (
+                    f.kind.to_string(),
+                    f.value.to_string(),
+                    f.placeholder.to_string(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            fields[2],
+            (
+                "le-audio-presentation-delay".into(),
+                "".into(),
+                "Auto (40)".into()
+            )
+        );
         assert_eq!(
             labels(&v.le_latency_opts),
             [
@@ -1743,6 +1961,48 @@ mod tests {
             .map(|o| o.0)
             .collect();
         assert_eq!(picked, ["Low latency"]);
+
+        // A reliable preset under a low latency is flagged, and its numbers fill the
+        // placeholders.
+        edits.set(
+            super::super::edits::Edit {
+                change: Change::LeAudioQos(LeAudioQos::Preset(Value::Set("48_4_2".into()))),
+                device: Some(bt.id.clone()),
+            },
+            &i.saved,
+            None,
+            Some(bt),
+        );
+        let c = Ctx {
+            inputs: &i,
+            edits: &edits,
+            read_only: None,
+        };
+        let v = device_view(&c, bt);
+        assert!(v.le_preset_set);
+        assert!(
+            v.le_preset_current
+                .starts_with("48_4_2: 48 kHz, 10 ms frames, 96 kbps")
+        );
+        assert!(
+            v.le_preset_note.contains("ignores 48_4_2"),
+            "{}",
+            v.le_preset_note
+        );
+        let placeholders: Vec<String> = v
+            .le_fields
+            .iter()
+            .map(|f| f.placeholder.to_string())
+            .collect();
+        assert_eq!(placeholders, ["Auto (13)", "Auto (100)", "Auto (40)"]);
+        let chosen: Vec<String> = v
+            .le_preset_rows
+            .iter()
+            .flat_map(|r| r.reliable.iter().chain(r.low.iter()).collect::<Vec<_>>())
+            .filter(|o| o.selected)
+            .map(|o| o.value.to_string())
+            .collect();
+        assert_eq!(chosen, ["48_4_2"]);
     }
 
     #[test]

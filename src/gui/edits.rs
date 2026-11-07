@@ -4,7 +4,7 @@
 //! one plan. Picking a value that matches what's already in effect drops the edit.
 
 use crate::core::model::{ClockSettings, Device, SampleFormat};
-use crate::core::settings::{Change, LdacQuality, LeAudioLatency, SavedConfig, Value};
+use crate::core::settings::{Change, LdacQuality, LeAudioLatency, LeAudioQos, SavedConfig, Value};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Edit {
@@ -136,6 +136,7 @@ pub fn device_change(kind: &str, value: &str) -> Option<Change> {
             "default" => Value::Default,
             v => Value::Set(LeAudioLatency::parse(v)?),
         }),
+        k if k.starts_with("le-audio-") => Change::LeAudioQos(LeAudioQos::parse(k, value).ok()?),
         _ => return None,
     })
 }
@@ -279,6 +280,21 @@ mod tests {
         assert_eq!(
             device_change("le-latency", "low-latency"),
             Some(Change::LeAudioLatency(Value::Set(LeAudioLatency::Low)))
+        );
+        assert_eq!(
+            device_change("le-audio-presentation-delay", "7.5"),
+            Some(Change::LeAudioQos(LeAudioQos::PresentationDelay(
+                Value::Set(7500)
+            )))
+        );
+        assert_eq!(
+            device_change("le-audio-preset", "default"),
+            Some(Change::LeAudioQos(LeAudioQos::Preset(Value::Default)))
+        );
+        assert_eq!(device_change("le-audio-retransmissions", "lots"), None);
+        assert_eq!(
+            device_change("le-audio-framing", "unframed"),
+            Some(Change::LeAudioQos(LeAudioQos::Framing(Value::Set(false))))
         );
         assert_eq!(
             global_change("headset-autoswitch", "off", &[]),

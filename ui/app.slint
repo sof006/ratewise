@@ -8,12 +8,12 @@ import "../assets/fonts/Inter-Regular.ttf";
 import "../assets/fonts/Inter-SemiBold.ttf";
 import "../assets/fonts/Inter-Bold.ttf";
 import {
-    Button, Check, Chip, ChipRow, Eyebrow, Fact, FactLine, Icon, IconButton, KV, Line, Opt,
-    QuantumControl, RateGrid, Row, Section, Segmented, Stat, StatBlock, TabBar, Tag, Theme,
-    ToggleChips, Why,
+    Button, Check, Chip, ChipRow, Eyebrow, Fact, FactLine, Icon, IconButton, KV, Line,
+    NumberField, Opt, PresetGrid, PresetRow, QosField, QuantumControl, RateGrid, Row, Section,
+    Segmented, Stat, StatBlock, TabBar, Tag, Theme, ToggleChips, Why,
 } from "widgets.slint";
 
-export { Opt, Chip, ChipRow, KV, Fact, Stat, Line, Theme }
+export { Opt, Chip, ChipRow, KV, Fact, Stat, Line, PresetRow, QosField, Theme }
 
 export struct NavItem {
     // "header", "device" or "page"
@@ -71,9 +71,18 @@ export struct DeviceView {
     // Shown only for devices that offer LDAC.
     ldac-opts: [Opt],
     ldac-why: string,
-    // Shown only for devices that offer LE Audio.
+    // The LE Audio section, shown only for devices that offer LE Audio.
+    le-audio: bool,
+    // Why it can't be changed here.
+    le-why: string,
     le-latency-opts: [Opt],
-    le-latency-why: string,
+    le-preset-rows: [PresetRow],
+    le-preset-current: string,
+    // Set when the latency choice makes PipeWire ignore the preset.
+    le-preset-note: string,
+    le-preset-set: bool,
+    le-fields: [QosField],
+    le-framing-opts: [Opt],
     raw: string,
 }
 
@@ -520,14 +529,68 @@ component SoundTab inherits Page {
                 }
                 if root.device.ldac-why != "": Why { text: root.device.ldac-why; }
             }
-            if root.device.le-latency-opts.length > 0 || root.device.le-latency-why != "": Row {
-                title: "LE Audio latency";
-                help: "How LE Audio (LC3) trades delay against dropouts. Saved, and used the next time the device connects.";
-                if root.device.le-latency-opts.length > 0: Segmented {
+        }
+        if root.device.le-audio: Section {
+            title: "LE Audio";
+            description: "How the LC3 link is set up. Saved, and used the next time the device connects. PipeWire marks these settings as experimental.";
+            if root.device.le-why != "": Row {
+                first: true;
+                Why { text: root.device.le-why; }
+            }
+            if root.device.le-why == "": Row {
+                first: true;
+                title: "Latency";
+                help: "Trades delay against dropouts by limiting which presets PipeWire picks from.";
+                Segmented {
                     opts: root.device.le-latency-opts;
                     picked(v) => { root.device-option("le-latency", v); }
                 }
-                if root.device.le-latency-why != "": Why { text: root.device.le-latency-why; }
+            }
+            if root.device.le-why == "": Row {
+                title: "Preset";
+                help: "A fixed LC3 configuration, named rate_configuration_target. Higher numbers carry more bits; odd ones use 7.5 ms frames, even ones 10 ms. If the device can't use it, PipeWire picks one itself.";
+                HorizontalLayout {
+                    spacing: 12px;
+                    Text {
+                        text: root.device.le-preset-current;
+                        font-size: Theme.small;
+                        color: Theme.ink;
+                        wrap: word-wrap;
+                        horizontal-stretch: 1;
+                        vertical-alignment: center;
+                    }
+                    if root.device.le-preset-set: Button {
+                        text: "Use automatic";
+                        kind: "ghost";
+                        clicked => { root.device-option("le-audio-preset", "default"); }
+                    }
+                }
+                if root.device.le-preset-note != "": Why { text: root.device.le-preset-note; }
+                PresetGrid {
+                    rows: root.device.le-preset-rows;
+                    picked(v) => { root.device-option("le-audio-preset", v); }
+                }
+            }
+            for f in root.device.le-fields: Row {
+                title: f.title;
+                help: f.help;
+                NumberField {
+                    value: f.value;
+                    unit: f.unit;
+                    placeholder: f.placeholder;
+                    label: f.title;
+                    decimal: f.decimal;
+                    edited(v) => { root.device-option(f.kind, v); }
+                }
+                if f.why != "": Why { text: f.why; }
+            }
+            if root.device.le-why == "": Row {
+                title: "Framing";
+                help: "Framed lets an LC3 frame span packets. 44.1 kHz needs it.";
+                Segmented {
+                    opts: root.device.le-framing-opts;
+                    picked(v) => { root.device-option("le-audio-framing", v); }
+                }
             }
         }
         if root.clock.headset-show: Section {

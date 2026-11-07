@@ -29,6 +29,6 @@ Notes
 Afterwards
   Restart PipeWire, pipewire-pulse and WirePlumber for this to take effect. Sound stops for a moment. Add --restart to do it now, or run:
     systemctl --user restart pipewire.service pipewire-pulse.service wireplumber.service
-  WirePlumber applies the LE Audio latency when the headset connects, so after the restart turn the headset off and on again.
+  WirePlumber applies the LE Audio settings when the headset connects, so after the restart turn the headset off and on again.
 
 Ratewise backs up every file first; `ratewise revert` undoes this.

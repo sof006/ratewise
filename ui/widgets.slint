@@ -25,6 +25,26 @@ export struct ChipRow {
     chips: [Chip],
 }
 
+// LC3 presets at one sample rate: the low-latency ones and the high-reliability ones.
+export struct PresetRow {
+    label: string,
+    low: [Opt],
+    reliable: [Opt],
+}
+
+// A number typed by hand, e.g. a retransmission count. `value` is empty for automatic.
+export struct QosField {
+    kind: string,
+    title: string,
+    help: string,
+    value: string,
+    unit: string,
+    placeholder: string,
+    // Why the value in the field can't be used.
+    why: string,
+    decimal: bool,
+}
+
 export struct KV {
     key: string,
     value: string,
@@ -608,6 +628,168 @@ export component ToggleChips inherits VerticalLayout {
         color: Theme.muted;
         wrap: word-wrap;
         min-height: 15px;
+    }
+}
+
+// LC3 presets as a grid: one row per sample rate, low-latency presets on the left and
+// high-reliability ones on the right. Each chip is the preset's configuration number.
+export component PresetGrid inherits VerticalLayout {
+    in property <[PresetRow]> rows;
+    callback picked(string);
+    property <string> tip;
+    // Six 30px chips with their gaps, in a bar with 2px padding.
+    property <length> group: 6 * 30px + 5 * 2px + 4px;
+    spacing: 6px;
+    HorizontalLayout {
+        spacing: 16px;
+        Rectangle { width: 64px; }
+        Text {
+            width: root.group;
+            text: "Low latency";
+            font-size: Theme.micro;
+            color: Theme.faint;
+        }
+        Text {
+            width: root.group;
+            text: "High reliability";
+            font-size: Theme.micro;
+            color: Theme.faint;
+        }
+        Rectangle { horizontal-stretch: 1; }
+    }
+    for row in root.rows: HorizontalLayout {
+        spacing: 16px;
+        Text {
+            width: 64px;
+            text: row.label;
+            font-size: Theme.small;
+            color: Theme.muted;
+            vertical-alignment: center;
+        }
+        HorizontalLayout {
+            width: root.group;
+            alignment: start;
+            Rectangle {
+                border-radius: 7px;
+                background: Theme.sunken;
+                border-width: 1px;
+                border-color: Theme.line;
+                HorizontalLayout {
+                    padding: 2px;
+                    spacing: 2px;
+                    for o in row.low: Segment {
+                        width: 30px;
+                        opt: o;
+                        picked => { root.picked(o.value); }
+                        changed hovered => {
+                            if (self.hovered) { root.tip = o.tip; } else if (root.tip == o.tip) { root.tip = ""; }
+                        }
+                    }
+                }
+            }
+        }
+        HorizontalLayout {
+            width: root.group;
+            alignment: start;
+            Rectangle {
+                border-radius: 7px;
+                background: Theme.sunken;
+                border-width: 1px;
+                border-color: Theme.line;
+                HorizontalLayout {
+                    padding: 2px;
+                    spacing: 2px;
+                    for o in row.reliable: Segment {
+                        width: 30px;
+                        opt: o;
+                        picked => { root.picked(o.value); }
+                        changed hovered => {
+                            if (self.hovered) { root.tip = o.tip; } else if (root.tip == o.tip) { root.tip = ""; }
+                        }
+                    }
+                }
+            }
+        }
+        Rectangle { horizontal-stretch: 1; }
+    }
+    Text {
+        text: root.tip;
+        font-size: Theme.small;
+        color: Theme.muted;
+        wrap: word-wrap;
+        min-height: 15px;
+    }
+}
+
+// A number field with its unit. Empty means automatic; the placeholder says what that is.
+// Sends the text on Enter or when the field loses focus, and "default" for Auto.
+export component NumberField inherits HorizontalLayout {
+    in property <string> value;
+    in property <string> unit;
+    in property <string> placeholder;
+    in property <string> label;
+    in property <bool> decimal;
+    callback edited(string);
+    spacing: 10px;
+    alignment: start;
+
+    function commit() {
+        if (input.text != root.value) {
+            root.edited(input.text == "" ? "default" : input.text);
+        }
+    }
+    changed value => { input.text = root.value; }
+
+    Rectangle {
+        width: 104px;
+        height: 32px;
+        border-radius: Theme.small-radius;
+        border-width: input.has-focus ? 1.5px : 1px;
+        border-color: input.has-focus ? Theme.ink : Theme.line-strong;
+        background: Theme.surface;
+        if input.text == "": Text {
+            x: 10px;
+            y: 0;
+            width: parent.width - 20px;
+            height: parent.height;
+            text: root.placeholder;
+            font-size: Theme.body;
+            color: Theme.faint;
+            vertical-alignment: center;
+        }
+        input := TextInput {
+            x: 10px;
+            y: 0;
+            width: parent.width - 20px;
+            height: parent.height;
+            text: root.value;
+            input-type: root.decimal ? InputType.decimal : InputType.number;
+            single-line: true;
+            font-size: Theme.body;
+            color: Theme.ink;
+            vertical-alignment: center;
+            accessible-label: root.label;
+            accepted => { root.commit(); }
+            changed has-focus => {
+                if (!self.has-focus) { root.commit(); }
+            }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        Text {
+            text: root.unit;
+            font-size: Theme.body;
+            color: Theme.muted;
+        }
+    }
+    if root.value != "": VerticalLayout {
+        alignment: center;
+        Button {
+            text: "Auto";
+            kind: "ghost";
+            clicked => { root.edited("default"); }
+        }
     }
 }
 

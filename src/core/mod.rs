@@ -3,6 +3,7 @@
 
 pub mod bluetooth;
 pub mod facts;
+pub mod lc3;
 pub mod merge;
 pub mod model;
 pub mod paths;

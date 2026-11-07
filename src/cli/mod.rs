@@ -13,7 +13,7 @@ use clap::{Args, Parser, Subcommand};
 
 use crate::app::{Env, Session};
 use crate::core::model::SampleFormat;
-use crate::core::settings::{Change, LdacQuality, LeAudioLatency, Mode, Value};
+use crate::core::settings::{Change, LdacQuality, LeAudioLatency, LeAudioQos, Mode, Value};
 use crate::probe::Probes;
 
 #[derive(Debug, Parser)]
@@ -213,6 +213,51 @@ pub enum SetCommand {
         #[command(flatten)]
         opts: SetOpts,
     },
+    /// An LE Audio device's LC3 preset, e.g. `48_5_1`, or `auto`. Saved only; needs
+    /// PipeWire 1.6.
+    ///
+    /// Names are <rate>_<config>_<target>: rate 8, 16, 24, 32, 441 (44.1 kHz) or 48;
+    /// config 1-2 (1-6 at 48 kHz), odd for 7.5 ms frames and even for 10 ms, higher for
+    /// more bits; target 1 for low latency, 2 for high reliability. If the device can't
+    /// use the preset, PipeWire ignores it.
+    LeAudioPreset {
+        #[arg(value_parser = parse_le_preset)]
+        value: LeAudioQos,
+        #[command(flatten)]
+        opts: SetOpts,
+    },
+    /// How often an LE Audio packet is resent (0-255), or `auto` for the preset's
+    /// number. Saved only; needs PipeWire 1.6.
+    LeAudioRetransmissions {
+        #[arg(value_parser = parse_le_rtn)]
+        value: LeAudioQos,
+        #[command(flatten)]
+        opts: SetOpts,
+    },
+    /// The most time an LE Audio packet may spend on the link, in ms (5-4000), or
+    /// `auto`. Saved only; needs PipeWire 1.6.
+    LeAudioTransportLatency {
+        #[arg(value_parser = parse_le_transport_latency)]
+        value: LeAudioQos,
+        #[command(flatten)]
+        opts: SetOpts,
+    },
+    /// When the device plays what it receives, in ms after the reference point (PipeWire
+    /// asks for 40), or `auto`. Saved only; needs PipeWire 1.6.
+    LeAudioPresentationDelay {
+        #[arg(value_parser = parse_le_presentation_delay)]
+        value: LeAudioQos,
+        #[command(flatten)]
+        opts: SetOpts,
+    },
+    /// LE Audio framing: `framed`, `unframed` or `auto` (the preset's). Saved only;
+    /// needs PipeWire 1.6.
+    LeAudioFraming {
+        #[arg(value_parser = parse_le_framing)]
+        value: LeAudioQos,
+        #[command(flatten)]
+        opts: SetOpts,
+    },
 }
 
 impl SetCommand {
@@ -235,6 +280,11 @@ impl SetCommand {
             S::HeadsetAutoswitch { value, opts } => (Change::HeadsetAutoswitch(value), opts),
             S::LdacQuality { value, opts } => (Change::LdacQuality(value), opts),
             S::LeAudioLatency { value, opts } => (Change::LeAudioLatency(value), opts),
+            S::LeAudioPreset { value, opts }
+            | S::LeAudioRetransmissions { value, opts }
+            | S::LeAudioTransportLatency { value, opts }
+            | S::LeAudioPresentationDelay { value, opts }
+            | S::LeAudioFraming { value, opts } => (Change::LeAudioQos(value), opts),
         }
     }
 }
@@ -406,6 +456,26 @@ fn parse_le_latency(s: &str) -> Result<Value<LeAudioLatency>, String> {
     LeAudioLatency::parse(s)
         .map(Value::Set)
         .ok_or_else(|| format!("\"{s}\": use `low`, `reliable` or `balanced`"))
+}
+
+fn parse_le_preset(s: &str) -> Result<LeAudioQos, String> {
+    LeAudioQos::parse("le-audio-preset", s)
+}
+
+fn parse_le_rtn(s: &str) -> Result<LeAudioQos, String> {
+    LeAudioQos::parse("le-audio-retransmissions", s)
+}
+
+fn parse_le_transport_latency(s: &str) -> Result<LeAudioQos, String> {
+    LeAudioQos::parse("le-audio-transport-latency", s)
+}
+
+fn parse_le_presentation_delay(s: &str) -> Result<LeAudioQos, String> {
+    LeAudioQos::parse("le-audio-presentation-delay", s)
+}
+
+fn parse_le_framing(s: &str) -> Result<LeAudioQos, String> {
+    LeAudioQos::parse("le-audio-framing", s)
 }
 
 fn parse_quality(s: &str) -> Result<Value<u8>, String> {

@@ -130,6 +130,26 @@ fn bluez_props(b: &BluetoothSaved) -> Props {
     if let Some(l) = b.le_audio_latency {
         p.push(("bluez5.bap.force-target-latency", quote(l.key())));
     }
+    // PipeWire reads these as strings, so they're quoted like the rest.
+    let q = &b.le_audio_qos;
+    if let Some(name) = &q.preset {
+        p.push(("bluez5.bap.preset", quote(name)));
+    }
+    if let Some(n) = q.retransmissions {
+        p.push(("bluez5.bap.rtn", quote(&n.to_string())));
+    }
+    if let Some(ms) = q.transport_latency_ms {
+        p.push(("bluez5.bap.latency", quote(&ms.to_string())));
+    }
+    if let Some(us) = q.presentation_delay_us {
+        p.push(("bluez5.bap.delay", quote(&us.to_string())));
+    }
+    if let Some(f) = q.framed {
+        p.push((
+            "bluez5.bap.framing",
+            quote(if f { "true" } else { "false" }),
+        ));
+    }
     p
 }
 
