@@ -29,9 +29,11 @@ declare -A setup=(
 all=(ubuntu:20.04 ubuntu:22.04 ubuntu:24.04 debian:11 debian:12 fedora:latest opensuse/tumbleweed archlinux:latest wayland)
 if [ $# -gt 0 ]; then targets=("$@"); else targets=("${all[@]}"); fi
 
+# 24-bit like a real desktop: openSUSE's xvfb-run defaults to 8-bit, where neither
+# OpenGL nor the software renderer can draw.
 x11='set -e
 A="/dist/app --appimage-extract-and-run"
-xvfb-run -a $A --self-test
+xvfb-run -a -s "-screen 0 1280x1024x24" $A --self-test
 $A doctor >/dev/null
 echo "doctor exit 0"'
 
